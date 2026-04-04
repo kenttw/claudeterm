@@ -335,6 +335,7 @@
     function setUrl(dir) {
       const url = dir ? '/' + dir : '/';
       if (location.pathname !== url) history.pushState({}, '', url);
+      document.title = dir ? 'ClaudeTerm-' + dir : 'ClaudeTerm';
     }
 
     // Called once session list is received — auto-attach or create based on URL
