@@ -9,14 +9,21 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-const AUTH_USER = process.env.WEB_TERM_USER || 'admin';
-const AUTH_PASS = process.env.WEB_TERM_PASS || 'admin';
 const BASE_DIR  = process.env.HOME + '/git';
 
 const CONFIG_FILE = path.join(__dirname, 'config.json');
-let config = { claudeCommand: 'claude' };
-try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { /* use defaults */ }
+const CONFIG_DEFAULTS = { claudeCommand: 'claude', user: 'admin', pass: 'admin' };
+let config = { ...CONFIG_DEFAULTS };
+if (!fs.existsSync(CONFIG_FILE)) {
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(CONFIG_DEFAULTS, null, 2));
+  console.log('[config] Created config.json with defaults');
+} else {
+  try { config = { ...CONFIG_DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; }
+  catch (e) { console.error('[config] Failed to parse config.json, using defaults'); }
+}
 const CLAUDE_CMD = config.claudeCommand || 'claude';
+const AUTH_USER  = process.env.WEB_TERM_USER || config.user || 'admin';
+const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
 
 app.use((req, res, next) => {
   const auth = req.headers.authorization;

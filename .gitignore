@@ -1,6 +1,9 @@
 # Dependencies
 web-terminal/node_modules/
 
+# Local config (auto-generated, may contain credentials)
+web-terminal/config.json
+
 # Session state (contains local paths)
 sessions/
 
