@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Web Terminal</title>
+  <title>ClaudeTerm</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
@@ -126,6 +126,60 @@
     }
     #dir-cancel:active { background: #3a3a3a; }
 
+    /* Kill confirm modal */
+    #kill-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    #kill-modal.show { display: flex; }
+    #kill-dialog {
+      background: #252526;
+      border: 1px solid #555;
+      border-radius: 12px;
+      width: 80vw;
+      max-width: 320px;
+      overflow: hidden;
+    }
+    #kill-dialog-title {
+      padding: 16px;
+      font-size: 14px;
+      color: #d4d4d4;
+      font-family: Menlo, Monaco, monospace;
+      text-align: center;
+      border-bottom: 1px solid #444;
+    }
+    #kill-dialog-name {
+      color: #fff;
+      font-weight: bold;
+    }
+    .kill-dialog-btns {
+      display: flex;
+    }
+    .kill-dialog-btns button {
+      flex: 1;
+      padding: 14px;
+      font-size: 14px;
+      font-family: Menlo, Monaco, monospace;
+      border: none;
+      cursor: pointer;
+      background: transparent;
+    }
+    #kill-cancel-btn {
+      color: #888;
+      border-right: 1px solid #444;
+    }
+    #kill-cancel-btn:active { background: #3a3a3a; }
+    #kill-confirm-btn {
+      color: #f66;
+      font-weight: bold;
+    }
+    #kill-confirm-btn:active { background: #3a3a3a; }
+
     #no-session {
       flex: 1;
       display: flex;
@@ -192,6 +246,17 @@
   </style>
 </head>
 <body>
+
+  <!-- Kill confirm modal -->
+  <div id="kill-modal">
+    <div id="kill-dialog">
+      <div id="kill-dialog-title">Close session <span id="kill-dialog-name"></span>?</div>
+      <div class="kill-dialog-btns">
+        <button id="kill-cancel-btn">Cancel</button>
+        <button id="kill-confirm-btn">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Directory picker modal -->
   <div id="dir-modal">
@@ -316,18 +381,7 @@
         kill.textContent = '×';
         kill.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (!kill.dataset.confirm) {
-            kill.textContent = '?';
-            kill.style.color = '#f90';
-            kill.dataset.confirm = '1';
-            setTimeout(() => {
-              kill.textContent = '×';
-              kill.style.color = '';
-              delete kill.dataset.confirm;
-            }, 2000);
-          } else {
-            ws.send(JSON.stringify({ type: 'session.kill', id: s.id }));
-          }
+          showKillConfirm(s.id, s.name);
         });
 
         tab.appendChild(label);
@@ -384,6 +438,34 @@
     ws.onopen = () => {
       // If no sessions yet, show empty state — handled by initial session.list
     };
+
+    // Kill confirm modal
+    const killModal = document.getElementById('kill-modal');
+    let pendingKillId = null;
+
+    function showKillConfirm(id, name) {
+      pendingKillId = id;
+      document.getElementById('kill-dialog-name').textContent = '"' + name + '"';
+      killModal.classList.add('show');
+    }
+
+    document.getElementById('kill-cancel-btn').addEventListener('click', () => {
+      killModal.classList.remove('show');
+      pendingKillId = null;
+    });
+    document.getElementById('kill-confirm-btn').addEventListener('click', () => {
+      if (pendingKillId !== null) {
+        ws.send(JSON.stringify({ type: 'session.kill', id: pendingKillId }));
+      }
+      killModal.classList.remove('show');
+      pendingKillId = null;
+    });
+    killModal.addEventListener('click', (e) => {
+      if (e.target === killModal) {
+        killModal.classList.remove('show');
+        pendingKillId = null;
+      }
+    });
 
     const dirModal = document.getElementById('dir-modal');
     const dirList  = document.getElementById('dir-list');
