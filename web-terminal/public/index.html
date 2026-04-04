@@ -289,7 +289,7 @@
     <button id="btn-1">1</button>
     <button id="btn-2">2</button>
     <button id="btn-3">3</button>
-    <button id="btn-claude">codemax<br><small style="font-size:10px;opacity:0.7">claude</small></button>
+    <button id="btn-claude"><small style="font-size:10px;opacity:0.7">claude</small></button>
     <button id="btn-folder" title="Switch folder">📂<br><small style="font-size:10px;opacity:0.7">folder</small></button>
     <div class="arrow-group">
       <button class="arrow-up"    id="btn-up">▲</button>
@@ -315,6 +315,18 @@
 
     let currentSessionId = null;
     let allSessions = [];
+    let claudeCmd = 'claude'; // overwritten by /api/config
+
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(cfg => {
+        claudeCmd = cfg.claudeCommand || 'claude';
+        const btn = document.getElementById('btn-claude');
+        const parts = claudeCmd.split(' ');
+        btn.innerHTML = parts.slice(0, -1).join(' ') + (parts.length > 1 ? '<br>' : '') +
+          `<small style="font-size:10px;opacity:0.7">${parts[parts.length - 1]}</small>`;
+      })
+      .catch(() => {});
 
     function send(data) {
       if (ws.readyState === WebSocket.OPEN)
@@ -531,7 +543,8 @@
       send(data);
       if (data === '\r') {
         const line = inputBuffer.trim();
-        if (/^(codemax\s+claude|claude)\s*$/.test(line)) {
+        const escapedCmd = claudeCmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp('^' + escapedCmd + '\\s*$').test(line)) {
           renameSession('Claude');
         }
         inputBuffer = '';
@@ -562,9 +575,8 @@
     document.getElementById('btn-2').addEventListener('click',      () => send('2'));
     document.getElementById('btn-3').addEventListener('click',      () => send('3'));
     document.getElementById('btn-claude').addEventListener('click', () => {
-      send('codemax claude\r');
+      send(claudeCmd + '\r');
       renameSession('Claude');
-      // Also tell server this is a claude-type session so it knows to resume it later
       if (currentSessionId) {
         ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name: 'Claude' }));
       }

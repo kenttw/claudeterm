@@ -13,6 +13,11 @@ const AUTH_USER = process.env.WEB_TERM_USER || 'admin';
 const AUTH_PASS = process.env.WEB_TERM_PASS || 'admin';
 const BASE_DIR  = process.env.HOME + '/git';
 
+const CONFIG_FILE = path.join(__dirname, 'config.json');
+let config = { claudeCommand: 'claude' };
+try { config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { /* use defaults */ }
+const CLAUDE_CMD = config.claudeCommand || 'claude';
+
 app.use((req, res, next) => {
   const auth = req.headers.authorization;
   const expected = 'Basic ' + Buffer.from(`${AUTH_USER}:${AUTH_PASS}`).toString('base64');
@@ -26,6 +31,10 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── API ───────────────────────────────────────────────────────────────────────
+app.get('/api/config', (req, res) => {
+  res.json({ claudeCommand: CLAUDE_CMD });
+});
+
 app.get('/api/dirs', (req, res) => {
   try {
     const entries = fs.readdirSync(BASE_DIR, { withFileTypes: true });
@@ -211,7 +220,7 @@ for (const s of savedList) {
   let autoCmd = null;
   if (s.type === 'claude') {
     const resumeId = s.claudeSessionId || s.name.replace(/^[^\w]+/, '').trim();
-    autoCmd = `codemax claude --resume ${resumeId}`;
+    autoCmd = `${CLAUDE_CMD} --resume ${resumeId}`;
     console.log(`[restore] "${s.name}" (${s.cwd}) → ${autoCmd}`);
   }
   createSession(s.name, s.type || 'shell', autoCmd, s.id, s.claudeSessionId, s.cwd);
@@ -237,7 +246,7 @@ wss.on('connection', (ws) => {
       if (msg.type === 'session.create') {
         if (current) current.clients.delete(ws);
         const type = msg.sessionType || 'shell';
-        const autoCmd = type === 'claude' ? 'codemax claude' : null;
+        const autoCmd = type === 'claude' ? CLAUDE_CMD : null;
         let cwd = null;
         if (msg.cwd) {
           // Support '__BASE__/dirname' shorthand from client
