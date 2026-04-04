@@ -1,0 +1,14 @@
+{
+  "name": "claudeterm",
+  "version": "1.0.0",
+  "description": "Run Claude Code sessions from a mobile browser over WiFi",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "node-pty": "^1.0.0"
+  }
+}

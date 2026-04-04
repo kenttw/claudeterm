@@ -1,0 +1,16 @@
+# Dependencies
+web-terminal/node_modules/
+
+# Session state (contains local paths)
+sessions/
+
+# Logs
+*.log
+nohup.out
+
+# IDE / tooling
+.claude/
+.idea/
+
+# macOS
+.DS_Store

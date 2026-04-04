@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Web Terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #1e1e1e; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Session bar */
+    #session-bar {
+      display: flex;
+      align-items: center;
+      background: #252526;
+      border-bottom: 1px solid #444;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex-shrink: 0;
+      min-height: 36px;
+      scrollbar-width: none;
+      white-space: nowrap;
+      flex-wrap: nowrap;
+    }
+    #session-bar::-webkit-scrollbar { display: none; }
+
+    #session-tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+
+    .session-tab {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      color: #888;
+      font-size: 12px;
+      font-family: Menlo, Monaco, monospace;
+      cursor: pointer;
+      white-space: nowrap;
+      border-right: 1px solid #333;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .session-tab.active { color: #fff; background: #1e1e1e; border-bottom: 2px solid #0e8; }
+    .session-tab.claude-type { border-bottom-color: #f90; }
+    .session-tab .claude-icon { font-size: 11px; opacity: 0.8; }
+    .session-tab .kill {
+      color: #666;
+      font-size: 14px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .session-tab .kill:hover { color: #f66; }
+
+    #btn-new-session {
+      padding: 6px 12px;
+      color: #888;
+      font-size: 18px;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      flex-shrink: 0;
+    }
+    #btn-new-session:hover { color: #fff; }
+
+    /* Directory picker modal */
+    #dir-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #dir-modal.show { display: flex; }
+    #dir-picker {
+      background: #252526;
+      border: 1px solid #555;
+      border-radius: 10px;
+      width: 88vw;
+      max-width: 400px;
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #dir-picker-header {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #888;
+      font-family: Menlo, Monaco, monospace;
+      border-bottom: 1px solid #444;
+      flex-shrink: 0;
+    }
+    #dir-list {
+      overflow-y: auto;
+      flex: 1;
+    }
+    .dir-item {
+      padding: 12px 16px;
+      font-family: Menlo, Monaco, monospace;
+      font-size: 13px;
+      color: #d4d4d4;
+      cursor: pointer;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dir-item:active { background: #3a3a3a; }
+    #dir-cancel {
+      padding: 12px;
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      cursor: pointer;
+      border-top: 1px solid #444;
+      flex-shrink: 0;
+    }
+    #dir-cancel:active { background: #3a3a3a; }
+
+    #no-session {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-family: Menlo, Monaco, monospace;
+      font-size: 14px;
+    }
+
+    #terminal { flex: 1; min-height: 0; width: 100%; }
+
+    /* Toolbar */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 8px;
+      background: #2d2d2d;
+      border-top: 1px solid #444;
+      flex-shrink: 0;
+    }
+
+    #toolbar button {
+      background: #3a3a3a;
+      color: #d4d4d4;
+      border: 1px solid #555;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: Menlo, Monaco, monospace;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      min-width: 40px;
+      min-height: 36px;
+      line-height: 1.2;
+      text-align: center;
+    }
+    #toolbar button:active { background: #555; border-color: #888; }
+
+    .arrow-group {
+      display: grid;
+      grid-template-columns: 34px 34px 34px;
+      grid-template-rows: 30px 30px;
+      gap: 3px;
+    }
+    .arrow-group button {
+      padding: 4px;
+      min-width: unset;
+      min-height: unset;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .arrow-up    { grid-column: 2; grid-row: 1; }
+    .arrow-left  { grid-column: 1; grid-row: 2; }
+    .arrow-down  { grid-column: 2; grid-row: 2; }
+    .arrow-right { grid-column: 3; grid-row: 2; }
+  </style>
+</head>
+<body>
+
+  <!-- Directory picker modal -->
+  <div id="dir-modal">
+    <div id="dir-picker">
+      <div id="dir-picker-header">📁 ~/git — Select directory</div>
+      <div id="dir-list"></div>
+      <div id="dir-cancel">Cancel</div>
+    </div>
+  </div>
+
+  <!-- Session bar -->
+  <div id="session-bar">
+    <div id="session-tabs"></div>
+    <div id="btn-new-session" title="New session">＋</div>
+  </div>
+
+  <!-- Terminal or empty state -->
+  <div id="no-session">No session — tap ＋ to start</div>
+  <div id="terminal" style="display:none"></div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button id="btn-tab">Tab</button>
+    <button id="btn-enter">Enter</button>
+    <button id="btn-ls">ls</button>
+    <button id="btn-cd">cd</button>
+    <button id="btn-clear">clear</button>
+    <button id="btn-bksp">⌫</button>
+    <button id="btn-ctrlc">^C</button>
+    <button id="btn-1">1</button>
+    <button id="btn-2">2</button>
+    <button id="btn-3">3</button>
+    <button id="btn-claude">codemax<br><small style="font-size:10px;opacity:0.7">claude</small></button>
+    <button id="btn-folder" title="Switch folder">📂<br><small style="font-size:10px;opacity:0.7">folder</small></button>
+    <div class="arrow-group">
+      <button class="arrow-up"    id="btn-up">▲</button>
+      <button class="arrow-left"  id="btn-left">◀</button>
+      <button class="arrow-down"  id="btn-down">▼</button>
+      <button class="arrow-right" id="btn-right">▶</button>
+    </div>
+  </div>
+
+  <script>
+    const term = new Terminal({
+      cursorBlink: true,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 14,
+      theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#ffffff' },
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal'));
+
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${location.host}`);
+
+    let currentSessionId = null;
+    let allSessions = [];
+
+    function send(data) {
+      if (ws.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ type: 'input', data }));
+    }
+
+    function showTerminal(show) {
+      document.getElementById('terminal').style.display = show ? '' : 'none';
+      document.getElementById('no-session').style.display = show ? 'none' : '';
+      if (show) setTimeout(() => fitAddon.fit(), 50);
+    }
+
+    // ── URL routing ────────────────────────────────────────────────────────────
+    function dirFromPath() {
+      return location.pathname.replace(/^\/+|\/+$/g, '') || null;
+    }
+
+    function setUrl(dir) {
+      const url = dir ? '/' + dir : '/';
+      if (location.pathname !== url) history.pushState({}, '', url);
+    }
+
+    // Called once session list is received — auto-attach or create based on URL
+    function autoAttachFromUrl() {
+      const dir = dirFromPath();
+      if (!dir) return;
+      const match = allSessions.find(s => s.dir === dir);
+      if (match) {
+        if (match.id !== currentSessionId) attachSession(match.id);
+      } else {
+        // No existing session for this dir — create one with auto name
+        ws.send(JSON.stringify({ type: 'session.create', name: 'session_1', cwd: '__BASE__/' + dir }));
+      }
+    }
+
+    // Handle browser back/forward
+    window.addEventListener('popstate', autoAttachFromUrl);
+
+    function renderTabs() {
+      const container = document.getElementById('session-tabs');
+      container.innerHTML = '';
+      const currentDir = dirFromPath();
+      const visible = currentDir
+        ? allSessions.filter(s => s.dir === currentDir)
+        : allSessions;
+      visible.forEach(s => {
+        const isActive = s.id === currentSessionId;
+        const isClaude = s.type === 'claude';
+        const tab = document.createElement('div');
+        tab.className = 'session-tab' + (isActive ? ' active' : '') + (isClaude ? ' claude-type' : '');
+
+        const label = document.createElement('span');
+        label.textContent = s.name;
+        if (isClaude) {
+          const icon = document.createElement('span');
+          icon.className = 'claude-icon';
+          icon.textContent = ' ⚡';
+          label.appendChild(icon);
+        }
+        label.addEventListener('click', () => attachSession(s.id));
+
+        const kill = document.createElement('span');
+        kill.className = 'kill';
+        kill.textContent = '×';
+        kill.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!kill.dataset.confirm) {
+            kill.textContent = '?';
+            kill.style.color = '#f90';
+            kill.dataset.confirm = '1';
+            setTimeout(() => {
+              kill.textContent = '×';
+              kill.style.color = '';
+              delete kill.dataset.confirm;
+            }, 2000);
+          } else {
+            ws.send(JSON.stringify({ type: 'session.kill', id: s.id }));
+          }
+        });
+
+        tab.appendChild(label);
+        tab.appendChild(kill);
+        container.appendChild(tab);
+      });
+    }
+
+    function attachSession(id) {
+      term.clear();
+      ws.send(JSON.stringify({ type: 'session.attach', id }));
+      // URL is updated when server responds with session.attached
+    }
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+
+      if (msg.type === 'output') {
+        term.write(msg.data);
+      }
+
+      if (msg.type === 'session.list') {
+        const firstLoad = allSessions.length === 0;
+        allSessions = msg.sessions;
+        renderTabs();
+        if (currentSessionId && !allSessions.find(s => s.id === currentSessionId)) {
+          currentSessionId = null;
+          showTerminal(false);
+          setUrl(null);
+        }
+        if (firstLoad) {
+          const dir = dirFromPath();
+          if (dir) {
+            autoAttachFromUrl(); // URL has a subdir — auto attach/create
+          } else {
+            openDirPicker(); // No subdir in URL — show dir picker immediately
+          }
+        }
+      }
+
+      if (msg.type === 'session.attached') {
+        currentSessionId = msg.id;
+        showTerminal(true);
+        renderTabs();
+        setUrl(msg.dir);   // update URL to /<dir>
+      }
+    };
+
+    ws.onclose = () => {
+      if (currentSessionId) term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n');
+    };
+
+    // On connect, show session list (server sends it automatically)
+    ws.onopen = () => {
+      // If no sessions yet, show empty state — handled by initial session.list
+    };
+
+    const dirModal = document.getElementById('dir-modal');
+    const dirList  = document.getElementById('dir-list');
+
+    function openDirPicker() {
+      dirList.innerHTML = '<div class="dir-item" style="color:#666">Loading...</div>';
+      dirModal.classList.add('show');
+      fetch('/api/dirs')
+        .then(r => r.json())
+        .then(({ base, dirs }) => {
+          dirList.innerHTML = '';
+          dirs.forEach(d => {
+            const item = document.createElement('div');
+            item.className = 'dir-item';
+            item.innerHTML = `<span>📂</span><span>${d}</span>`;
+            item.addEventListener('click', () => {
+              dirModal.classList.remove('show');
+              // Navigate to /<dir> — the URL change triggers auto-attach or create
+              history.pushState({}, '', '/' + d);
+              autoAttachFromUrl();
+            });
+            dirList.appendChild(item);
+          });
+        })
+        .catch(() => {
+          dirList.innerHTML = '<div class="dir-item" style="color:#f66">Failed to load</div>';
+        });
+    }
+
+    document.getElementById('btn-new-session').addEventListener('click', () => {
+      const dir = dirFromPath();
+      if (dir) {
+        // Already in a subdir — create session directly without dir picker
+        const existingCount = allSessions.filter(s => s.dir === dir).length;
+        const name = 'session_' + (existingCount + 1);
+        ws.send(JSON.stringify({ type: 'session.create', name, cwd: '__BASE__/' + dir }));
+      } else {
+        openDirPicker();
+      }
+    });
+    document.getElementById('dir-cancel').addEventListener('click', () => {
+      dirModal.classList.remove('show');
+    });
+
+    // Track typed input to detect claude commands
+    let inputBuffer = '';
+    function renameSession(name) {
+      if (currentSessionId) {
+        ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name }));
+      }
+    }
+
+    // xterm.js internally responds to queries (OSC color queries, cursor position reports)
+    // via onData — we must NOT forward these back to the PTY or they get echoed as garbage.
+    function isTerminalResponse(data) {
+      return /^\x1b\]/.test(data) ||        // OSC responses (e.g. background color)
+             /^\x1b\[\d+;\d+R$/.test(data); // Cursor Position Report (CPR)
+    }
+
+    term.onData((data) => {
+      if (isTerminalResponse(data)) return;
+      send(data);
+      if (data === '\r') {
+        const line = inputBuffer.trim();
+        if (/^(codemax\s+claude|claude)\s*$/.test(line)) {
+          renameSession('Claude');
+        }
+        inputBuffer = '';
+      } else if (data === '\x7f') {
+        inputBuffer = inputBuffer.slice(0, -1); // backspace
+      } else if (data.length === 1 && data >= ' ') {
+        inputBuffer += data;
+      }
+    });
+
+    term.onTitleChange((title) => {
+      if (currentSessionId && title) renameSession(title);
+    });
+    term.onResize(({ cols, rows }) => {
+      if (ws.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+    });
+
+    // Toolbar
+    document.getElementById('btn-tab').addEventListener('click',    () => send('\t'));
+    document.getElementById('btn-enter').addEventListener('click',  () => send('\r'));
+    document.getElementById('btn-ls').addEventListener('click',     () => send('ls\r'));
+    document.getElementById('btn-cd').addEventListener('click',     () => send('cd '));
+    document.getElementById('btn-clear').addEventListener('click',  () => send('clear\r'));
+    document.getElementById('btn-bksp').addEventListener('click',   () => send('\x7f'));
+    document.getElementById('btn-ctrlc').addEventListener('click',  () => send('\x03'));
+    document.getElementById('btn-1').addEventListener('click',      () => send('1'));
+    document.getElementById('btn-2').addEventListener('click',      () => send('2'));
+    document.getElementById('btn-3').addEventListener('click',      () => send('3'));
+    document.getElementById('btn-claude').addEventListener('click', () => {
+      send('codemax claude\r');
+      renameSession('Claude');
+      // Also tell server this is a claude-type session so it knows to resume it later
+      if (currentSessionId) {
+        ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name: 'Claude' }));
+      }
+    });
+    document.getElementById('btn-folder').addEventListener('click', () => openDirPicker());
+    document.getElementById('btn-up').addEventListener('click',     () => send('\x1b[A'));
+    document.getElementById('btn-down').addEventListener('click',   () => send('\x1b[B'));
+    document.getElementById('btn-right').addEventListener('click',  () => send('\x1b[C'));
+    document.getElementById('btn-left').addEventListener('click',   () => send('\x1b[D'));
+
+    window.addEventListener('resize', () => { if (currentSessionId) fitAddon.fit(); });
+    window.visualViewport?.addEventListener('resize', () => { if (currentSessionId) fitAddon.fit(); });
+  </script>
+</body>
+</html>
