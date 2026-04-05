@@ -345,7 +345,7 @@
     function showTerminal(show) {
       document.getElementById('terminal').style.display = show ? '' : 'none';
       document.getElementById('no-session').style.display = show ? 'none' : '';
-      if (show) setTimeout(() => fitAddon.fit(), 50);
+      if (show) setTimeout(() => { fitAddon.fit(); term.scrollToBottom(); }, 50);
     }
 
     // ── URL routing ────────────────────────────────────────────────────────────
@@ -423,7 +423,7 @@
         const msg = JSON.parse(e.data);
 
         if (msg.type === 'output') {
-          term.write(msg.data);
+          term.write(msg.data, () => term.scrollToBottom());
         }
 
         if (msg.type === 'session.list') {
@@ -593,8 +593,9 @@
     document.getElementById('btn-right').addEventListener('click',  () => send('\x1b[C'));
     document.getElementById('btn-left').addEventListener('click',   () => send('\x1b[D'));
 
-    window.addEventListener('resize', () => { if (currentSessionId) fitAddon.fit(); });
-    window.visualViewport?.addEventListener('resize', () => { if (currentSessionId) fitAddon.fit(); });
+    function fitAndScroll() { fitAddon.fit(); term.scrollToBottom(); }
+    window.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
+    window.visualViewport?.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
   </script>
 </body>
 </html>

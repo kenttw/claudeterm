@@ -50,11 +50,14 @@ function recordFailure(ip) {
 const wss = new WebSocketServer({
   server,
   verifyClient: ({ req }, done) => {
+    const ip = req.socket.remoteAddress;
     const url = new URL(req.url, 'http://localhost');
     const token = url.searchParams.get('token');
     if (validateToken(token)) {
+      console.log(`${new Date().toISOString()} ${ip} WS connected`);
       done(true);
     } else {
+      console.warn(`${new Date().toISOString()} ${ip} WS REJECTED (bad/missing token)`);
       done(false, 401, 'Unauthorized');
     }
   },
@@ -78,6 +81,15 @@ const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
 
 app.use((req, res, next) => {
   const ip = req.socket.remoteAddress; // never trust X-Forwarded-For — can be spoofed
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const line = `${new Date().toISOString()} ${ip} ${req.method} ${req.path} ${res.statusCode} ${ms}ms`;
+    console.log(line);
+    if (res.statusCode === 401 || res.statusCode === 429) {
+      console.warn(`[WARN] Auth failure from ${ip}: ${req.method} ${req.path}`);
+    }
+  });
   if (!checkRateLimit(ip)) {
     return res.status(429).send('Too Many Requests');
   }
