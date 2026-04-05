@@ -311,7 +311,16 @@
     term.open(document.getElementById('terminal'));
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${location.host}`);
+    let ws;
+    fetch('/api/token')
+      .then(r => r.json())
+      .then(({ token }) => {
+        ws = new WebSocket(`${protocol}//${location.host}?token=${token}`);
+        initWs();
+      })
+      .catch(() => {
+        document.getElementById('no-session').textContent = 'Auth failed — please reload.';
+      });
 
     let currentSessionId = null;
     let allSessions = [];
@@ -409,48 +418,45 @@
       // URL is updated when server responds with session.attached
     }
 
-    ws.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
+    function initWs() {
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
 
-      if (msg.type === 'output') {
-        term.write(msg.data);
-      }
-
-      if (msg.type === 'session.list') {
-        const firstLoad = allSessions.length === 0;
-        allSessions = msg.sessions;
-        renderTabs();
-        if (currentSessionId && !allSessions.find(s => s.id === currentSessionId)) {
-          currentSessionId = null;
-          showTerminal(false);
-          setUrl(null);
+        if (msg.type === 'output') {
+          term.write(msg.data);
         }
-        if (firstLoad) {
-          const dir = dirFromPath();
-          if (dir) {
-            autoAttachFromUrl(); // URL has a subdir — auto attach/create
-          } else {
-            openDirPicker(); // No subdir in URL — show dir picker immediately
+
+        if (msg.type === 'session.list') {
+          const firstLoad = allSessions.length === 0;
+          allSessions = msg.sessions;
+          renderTabs();
+          if (currentSessionId && !allSessions.find(s => s.id === currentSessionId)) {
+            currentSessionId = null;
+            showTerminal(false);
+            setUrl(null);
+          }
+          if (firstLoad) {
+            const dir = dirFromPath();
+            if (dir) {
+              autoAttachFromUrl();
+            } else {
+              openDirPicker();
+            }
           }
         }
-      }
 
-      if (msg.type === 'session.attached') {
-        currentSessionId = msg.id;
-        showTerminal(true);
-        renderTabs();
-        setUrl(msg.dir);   // update URL to /<dir>
-      }
-    };
+        if (msg.type === 'session.attached') {
+          currentSessionId = msg.id;
+          showTerminal(true);
+          renderTabs();
+          setUrl(msg.dir);
+        }
+      };
 
-    ws.onclose = () => {
-      if (currentSessionId) term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n');
-    };
-
-    // On connect, show session list (server sends it automatically)
-    ws.onopen = () => {
-      // If no sessions yet, show empty state — handled by initial session.list
-    };
+      ws.onclose = () => {
+        if (currentSessionId) term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n');
+      };
+    }
 
     // Kill confirm modal
     const killModal = document.getElementById('kill-modal');

@@ -7,7 +7,57 @@ const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+
+// ── Auth tokens (WS cannot use Basic Auth — use short-lived tokens) ───────────
+const tokens = new Map(); // token → expiry timestamp
+const TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
+
+function generateToken() {
+  const token = require('crypto').randomBytes(32).toString('hex');
+  tokens.set(token, Date.now() + TOKEN_TTL);
+  // Clean up expired tokens
+  for (const [t, exp] of tokens) if (Date.now() > exp) tokens.delete(t);
+  return token;
+}
+
+function validateToken(token) {
+  if (!token || !tokens.has(token)) return false;
+  if (Date.now() > tokens.get(token)) { tokens.delete(token); return false; }
+  return true;
+}
+
+// ── Rate limiter (max 10 failed attempts per IP per 15 min) ──────────────────
+const authFailures = new Map(); // ip → { count, resetAt }
+const RATE_LIMIT = 10;
+const RATE_WINDOW = 15 * 60 * 1000;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = authFailures.get(ip);
+  if (!entry || now > entry.resetAt) {
+    authFailures.set(ip, { count: 0, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  return entry.count < RATE_LIMIT;
+}
+
+function recordFailure(ip) {
+  const entry = authFailures.get(ip);
+  if (entry) entry.count++;
+}
+
+const wss = new WebSocketServer({
+  server,
+  verifyClient: ({ req }, done) => {
+    const url = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    if (validateToken(token)) {
+      done(true);
+    } else {
+      done(false, 401, 'Unauthorized');
+    }
+  },
+});
 
 const BASE_DIR  = process.env.HOME + '/git';
 
@@ -26,9 +76,14 @@ const AUTH_USER  = process.env.WEB_TERM_USER || config.user || 'admin';
 const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
 
 app.use((req, res, next) => {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  if (!checkRateLimit(ip)) {
+    return res.status(429).send('Too Many Requests');
+  }
   const auth = req.headers.authorization;
   const expected = 'Basic ' + Buffer.from(`${AUTH_USER}:${AUTH_PASS}`).toString('base64');
   if (!auth || auth !== expected) {
+    recordFailure(ip);
     res.set('WWW-Authenticate', 'Basic realm="Web Terminal"');
     return res.status(401).send('Unauthorized');
   }
@@ -38,6 +93,10 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── API ───────────────────────────────────────────────────────────────────────
+app.get('/api/token', (req, res) => {
+  res.json({ token: generateToken() });
+});
+
 app.get('/api/config', (req, res) => {
   res.json({ claudeCommand: CLAUDE_CMD });
 });
@@ -311,6 +370,6 @@ wss.on('connection', (ws) => {
 const PORT = process.env.PORT || 7681;
 server.listen(PORT, () => {
   console.log(`Web terminal running at http://localhost:${PORT}`);
-  console.log(`Credentials: ${AUTH_USER} / ${AUTH_PASS}`);
+  console.log(`Credentials: ${AUTH_USER} / ${'*'.repeat(AUTH_PASS.length)}`);
   console.log(`Base dir: ${BASE_DIR}`);
 });
