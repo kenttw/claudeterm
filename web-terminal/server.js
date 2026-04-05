@@ -23,6 +23,7 @@ function generateToken() {
 function validateToken(token) {
   if (!token || !tokens.has(token)) return false;
   if (Date.now() > tokens.get(token)) { tokens.delete(token); return false; }
+  tokens.delete(token); // single-use
   return true;
 }
 
@@ -76,7 +77,7 @@ const AUTH_USER  = process.env.WEB_TERM_USER || config.user || 'admin';
 const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
 
 app.use((req, res, next) => {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+  const ip = req.socket.remoteAddress; // never trust X-Forwarded-For — can be spoofed
   if (!checkRateLimit(ip)) {
     return res.status(429).send('Too Many Requests');
   }
@@ -262,10 +263,7 @@ function sessionList() {
     id: s.id,
     name: s.name,
     type: s.type,
-    cwd: s.cwd,
-    // dirname = last segment of cwd, used for URL routing
-    dir: path.basename(s.cwd),
-    claudeSessionId: s.claudeSessionId,
+    dir: path.basename(s.cwd), // only the dirname, not full path
   }));
 }
 
@@ -307,6 +305,7 @@ wss.on('connection', (ws) => {
 
   ws.on('message', (raw) => {
     try {
+      if (raw.length > 64 * 1024) return; // 64 KB max message size
       const msg = JSON.parse(raw);
 
       if (msg.type === 'session.create') {
@@ -339,7 +338,7 @@ wss.on('connection', (ws) => {
       if (msg.type === 'session.rename') {
         const session = sessions.get(msg.id);
         if (session) {
-          session.name = msg.name;
+          session.name = String(msg.name || '').slice(0, 100);
           if (msg.name === 'Claude' && session.type !== 'claude') session.type = 'claude';
           saveSessions();
           broadcast({ type: 'session.list', sessions: sessionList() });
