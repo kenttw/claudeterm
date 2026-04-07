@@ -290,6 +290,8 @@
     <button id="btn-2">2</button>
     <button id="btn-3">3</button>
     <button id="btn-claude"><small style="font-size:10px;opacity:0.7">claude</small></button>
+    <button id="btn-continue">cont<br><small style="font-size:10px;opacity:0.7">inue</small></button>
+    <button id="btn-next">do next<br><small style="font-size:10px;opacity:0.7">item</small></button>
     <button id="btn-folder" title="Switch folder">📂<br><small style="font-size:10px;opacity:0.7">folder</small></button>
     <div class="arrow-group">
       <button class="arrow-up"    id="btn-up">▲</button>
@@ -304,6 +306,7 @@
       cursorBlink: true,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize: 14,
+      scrollback: 50000,
       theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#ffffff' },
     });
     const fitAddon = new FitAddon.FitAddon();
@@ -349,25 +352,34 @@
     }
 
     // ── URL routing ────────────────────────────────────────────────────────────
-    function dirFromPath() {
-      return location.pathname.replace(/^\/+|\/+$/g, '') || null;
+    function parsePath() {
+      const parts = location.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+      return { dir: parts[0] || null, sessionName: parts[1] ? decodeURIComponent(parts[1]) : null };
     }
 
-    function setUrl(dir) {
-      const url = dir ? '/' + dir : '/';
+    function dirFromPath() {
+      return parsePath().dir;
+    }
+
+    function setUrl(dir, sessionName) {
+      let url = dir ? '/' + dir : '/';
+      if (dir && sessionName) url += '/' + encodeURIComponent(sessionName);
       if (location.pathname !== url) history.pushState({}, '', url);
       document.title = dir ? 'ClaudeTerm-' + dir : 'ClaudeTerm';
     }
 
     // Called once session list is received — auto-attach or create based on URL
     function autoAttachFromUrl() {
-      const dir = dirFromPath();
+      const { dir, sessionName } = parsePath();
       if (!dir) return;
-      const match = allSessions.find(s => s.dir === dir);
+      // Match by dir + session name if present, otherwise first in dir
+      const inDir = allSessions.filter(s => s.dir === dir);
+      const match = sessionName
+        ? (inDir.find(s => s.name === sessionName) || inDir[0])
+        : inDir[0];
       if (match) {
         if (match.id !== currentSessionId) attachSession(match.id);
       } else {
-        // No existing session for this dir — create one with auto name
         ws.send(JSON.stringify({ type: 'session.create', name: 'session_1', cwd: '__BASE__/' + dir }));
       }
     }
@@ -430,10 +442,13 @@
           const firstLoad = allSessions.length === 0;
           allSessions = msg.sessions;
           renderTabs();
-          if (currentSessionId && !allSessions.find(s => s.id === currentSessionId)) {
+          const current = allSessions.find(s => s.id === currentSessionId);
+          if (currentSessionId && !current) {
             currentSessionId = null;
             showTerminal(false);
-            setUrl(null);
+            setUrl(dirFromPath());
+          } else if (current) {
+            setUrl(current.dir, current.name); // keep URL in sync after renames
           }
           if (firstLoad) {
             const dir = dirFromPath();
@@ -449,7 +464,7 @@
           currentSessionId = msg.id;
           showTerminal(true);
           renderTabs();
-          setUrl(msg.dir);
+          setUrl(msg.dir, msg.name);
         }
       };
 
@@ -587,7 +602,9 @@
         ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name: 'Claude' }));
       }
     });
-    document.getElementById('btn-folder').addEventListener('click', () => openDirPicker());
+    document.getElementById('btn-continue').addEventListener('click', () => send('continue\r'));
+    document.getElementById('btn-next').addEventListener('click',     () => send('do next item\r'));
+    document.getElementById('btn-folder').addEventListener('click',   () => openDirPicker());
     document.getElementById('btn-up').addEventListener('click',     () => send('\x1b[A'));
     document.getElementById('btn-down').addEventListener('click',   () => send('\x1b[B'));
     document.getElementById('btn-right').addEventListener('click',  () => send('\x1b[C'));
