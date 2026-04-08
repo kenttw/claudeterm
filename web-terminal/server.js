@@ -302,6 +302,17 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
       }
     }
 
+    if (session.type === 'claude' && /too\s+many\s+requests|rate.{0,5}limit/i.test(data)) {
+      const retryMatch = data.match(/[Rr]etry(?:ing)?\s+in\s+(\d+)/);
+      const retryAfter = retryMatch ? parseInt(retryMatch[1]) : null;
+      console.log(`[session ${id}] Rate limited${retryAfter ? ` — retry in ${retryAfter}s` : ''}`);
+      for (const client of session.clients) {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({ type: 'rate.limited', retryAfter }));
+        }
+      }
+    }
+
     for (const client of session.clients) {
       if (client.readyState === client.OPEN) {
         client.send(JSON.stringify({ type: 'output', data }));
