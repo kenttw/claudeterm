@@ -233,6 +233,12 @@
       line-height: 1;
     }
     .session-tab .kill:hover { color: #f66; }
+    .session-tab .conn-badge {
+      font-size: 10px;
+      color: #5bf;
+      opacity: 0.85;
+      line-height: 1;
+    }
 
     #btn-new-session {
       padding: 6px 12px;
@@ -356,6 +362,18 @@
     }
     #kill-confirm-btn:active { background: #3a3a3a; }
 
+    #rate-limit-banner {
+      display: none;
+      background: #2a1800;
+      border-bottom: 1px solid #664400;
+      color: #f90;
+      font-family: Menlo, Monaco, monospace;
+      font-size: 12px;
+      padding: 5px 12px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
     #no-session {
       flex: 1;
       display: flex;
@@ -476,6 +494,8 @@
 
     <!-- Col 3: terminal -->
     <div id="terminal-column">
+      <!-- Rate limit notification banner -->
+      <div id="rate-limit-banner"><span id="rate-limit-msg"></span></div>
       <div id="no-session">No session — tap ＋ to start</div>
       <div id="terminal" style="display:none"></div>
     </div>
@@ -532,6 +552,32 @@
 
     let currentSessionId = null;
     let allSessions = [];
+    let rateLimitTimerId = null;
+
+    function showRateLimit(retryAfter) {
+      clearTimeout(rateLimitTimerId);
+      const banner = document.getElementById('rate-limit-banner');
+      const msg = document.getElementById('rate-limit-msg');
+      banner.style.display = '';
+      if (retryAfter > 0) {
+        let remaining = retryAfter;
+        const tick = () => {
+          msg.textContent = `\u26a0 Rate limited — retrying in ${remaining}s`;
+          if (remaining <= 0) { hideRateLimit(); return; }
+          remaining--;
+          rateLimitTimerId = setTimeout(tick, 1000);
+        };
+        tick();
+      } else {
+        msg.textContent = '\u26a0 Rate limited — waiting...';
+        rateLimitTimerId = setTimeout(hideRateLimit, 65000);
+      }
+    }
+
+    function hideRateLimit() {
+      clearTimeout(rateLimitTimerId);
+      document.getElementById('rate-limit-banner').style.display = 'none';
+    }
     let claudeCmd = 'claude'; // overwritten by /api/config
 
     fetch('/api/config')
@@ -615,6 +661,16 @@
         }
         label.addEventListener('click', () => attachSession(s.id));
 
+        tab.appendChild(label);
+
+        if (s.clients > 1) {
+          const badge = document.createElement('span');
+          badge.className = 'conn-badge';
+          badge.textContent = '●' + s.clients;
+          badge.title = s.clients + ' connections';
+          tab.appendChild(badge);
+        }
+
         const kill = document.createElement('span');
         kill.className = 'kill';
         kill.textContent = '×';
@@ -623,7 +679,6 @@
           showKillConfirm(s.id, s.name);
         });
 
-        tab.appendChild(label);
         tab.appendChild(kill);
         container.appendChild(tab);
       });
@@ -665,8 +720,13 @@
           }
         }
 
+        if (msg.type === 'rate.limited') {
+          showRateLimit(msg.retryAfter);
+        }
+
         if (msg.type === 'session.attached') {
           currentSessionId = msg.id;
+          hideRateLimit();
           showTerminal(true);
           renderTabs();
           setUrl(msg.dir, msg.name);

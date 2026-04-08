@@ -302,6 +302,17 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
       }
     }
 
+    if (session.type === 'claude' && /too\s+many\s+requests|rate.{0,5}limit/i.test(data)) {
+      const retryMatch = data.match(/[Rr]etry(?:ing)?\s+in\s+(\d+)/);
+      const retryAfter = retryMatch ? parseInt(retryMatch[1]) : null;
+      console.log(`[session ${id}] Rate limited${retryAfter ? ` — retry in ${retryAfter}s` : ''}`);
+      for (const client of session.clients) {
+        if (client.readyState === client.OPEN) {
+          client.send(JSON.stringify({ type: 'rate.limited', retryAfter }));
+        }
+      }
+    }
+
     for (const client of session.clients) {
       if (client.readyState === client.OPEN) {
         client.send(JSON.stringify({ type: 'output', data }));
@@ -331,6 +342,7 @@ function sessionList() {
     name: s.name,
     type: s.type,
     dir: path.basename(s.cwd), // only the dirname, not full path
+    clients: s.clients.size,
   }));
 }
 
@@ -400,6 +412,7 @@ wss.on('connection', (ws) => {
         current.clients.add(ws);
         ws.send(JSON.stringify({ type: 'session.attached', id: current.id, name: current.name, sessionType: current.type, dir: path.basename(current.cwd) }));
         if (current.buffer) ws.send(JSON.stringify({ type: 'output', data: current.buffer }));
+        broadcast({ type: 'session.list', sessions: sessionList() });
       }
 
       if (msg.type === 'session.rename') {
@@ -429,7 +442,10 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    if (current) current.clients.delete(ws);
+    if (current) {
+      current.clients.delete(ws);
+      broadcast({ type: 'session.list', sessions: sessionList() });
+    }
   });
 });
 
