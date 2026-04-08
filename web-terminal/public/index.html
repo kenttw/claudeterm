@@ -233,6 +233,12 @@
       line-height: 1;
     }
     .session-tab .kill:hover { color: #f66; }
+    .session-tab .conn-badge {
+      font-size: 10px;
+      color: #5bf;
+      opacity: 0.85;
+      line-height: 1;
+    }
 
     #btn-new-session {
       padding: 6px 12px;
@@ -655,6 +661,16 @@
         }
         label.addEventListener('click', () => attachSession(s.id));
 
+        tab.appendChild(label);
+
+        if (s.clients > 1) {
+          const badge = document.createElement('span');
+          badge.className = 'conn-badge';
+          badge.textContent = '●' + s.clients;
+          badge.title = s.clients + ' connections';
+          tab.appendChild(badge);
+        }
+
         const kill = document.createElement('span');
         kill.className = 'kill';
         kill.textContent = '×';
@@ -663,7 +679,6 @@
           showKillConfirm(s.id, s.name);
         });
 
-        tab.appendChild(label);
         tab.appendChild(kill);
         container.appendChild(tab);
       });
