@@ -127,6 +127,61 @@ app.get('/api/dirs', (req, res) => {
   }
 });
 
+app.use(express.json({ limit: '2mb' }));
+
+// ── File browser API ──────────────────────────────────────────────────────────
+function safePath(p) {
+  if (!p) return null;
+  const resolved = path.resolve(p);
+  // Allow access only under BASE_DIR
+  if (!resolved.startsWith(BASE_DIR + path.sep) && resolved !== BASE_DIR) return null;
+  return resolved;
+}
+
+app.get('/api/files', (req, res) => {
+  const dir = safePath(req.query.path) || BASE_DIR;
+  if (!dir) return res.status(400).json({ error: 'Invalid path' });
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const items = entries
+      .filter(e => !e.name.startsWith('.'))
+      .map(e => ({ name: e.name, isDir: e.isDirectory() }))
+      .sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    res.json({ path: dir, items });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/file', (req, res) => {
+  const file = safePath(req.query.path);
+  if (!file) return res.status(400).json({ error: 'Invalid path' });
+  try {
+    const stat = fs.statSync(file);
+    if (stat.size > 2 * 1024 * 1024) return res.status(413).json({ error: 'File too large' });
+    const content = fs.readFileSync(file, 'utf8');
+    res.json({ path: file, content });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/file', (req, res) => {
+  const { path: filePath, content } = req.body || {};
+  const file = safePath(filePath);
+  if (!file) return res.status(400).json({ error: 'Invalid path' });
+  if (typeof content !== 'string') return res.status(400).json({ error: 'No content' });
+  try {
+    fs.writeFileSync(file, content, 'utf8');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // SPA catch-all: serve index.html for any non-API, non-asset path
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

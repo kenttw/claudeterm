@@ -11,6 +11,182 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #1e1e1e; overflow: hidden; display: flex; flex-direction: column; }
 
+    /* ── Desktop 3-column layout ──────────────────────────────────────────── */
+    #main-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+    }
+
+    /* Drag handle between panels */
+    .drag-handle {
+      width: 5px;
+      flex-shrink: 0;
+      background: #2a2a2a;
+      cursor: col-resize;
+      transition: background 0.15s;
+      z-index: 10;
+    }
+    .drag-handle:hover, .drag-handle.dragging { background: #0e8; }
+
+    /* File browser — desktop only */
+    #file-browser {
+      display: none;
+      flex-direction: column;
+      width: 200px;
+      min-width: 120px;
+      background: #1e1e1e;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    #file-browser-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #777;
+      font-family: Menlo, Monaco, monospace;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    #fb-path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    #fb-up {
+      cursor: pointer;
+      padding: 2px 5px;
+      color: #888;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #fb-up:hover { color: #fff; }
+    #fb-list {
+      flex: 1;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #444 transparent;
+    }
+    .fb-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-family: Menlo, Monaco, monospace;
+      color: #c8c8c8;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      user-select: none;
+    }
+    .fb-item:hover { background: #2a2d2e; }
+    .fb-item.active { background: #37373d; color: #fff; }
+    .fb-item .fb-icon { flex-shrink: 0; font-size: 13px; }
+
+    /* Editor panel — desktop only, col 2 */
+    #editor-panel {
+      display: none;
+      flex-direction: column;
+      width: 380px;
+      min-width: 160px;
+      background: #1e1e1e;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    #editor-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #888;
+      font-family: Menlo, Monaco, monospace;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #editor-filename {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #d4d4d4;
+    }
+    #editor-save {
+      padding: 2px 8px;
+      background: #0e8;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: Menlo, Monaco, monospace;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #editor-save:hover { background: #0fa; }
+    #editor-save.saved { background: #555; color: #888; cursor: default; }
+    #editor-close {
+      color: #666;
+      cursor: pointer;
+      font-size: 16px;
+      flex-shrink: 0;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    #editor-close:hover { color: #f66; }
+    #editor-placeholder {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #444;
+      font-family: Menlo, Monaco, monospace;
+      font-size: 13px;
+    }
+    #editor-textarea {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border: none;
+      outline: none;
+      padding: 10px;
+      font-size: 13px;
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      line-height: 1.5;
+      resize: none;
+      tab-size: 2;
+    }
+
+    /* Terminal column — col 3, takes remaining space */
+    #terminal-column {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #terminal { flex: 1; min-height: 0; width: 100%; }
+
+    /* Show file browser + editor on desktop */
+    @media (min-width: 900px) {
+      #file-browser { display: flex; }
+      #editor-panel { display: flex; }
+      .drag-handle { display: block; }
+    }
+    @media (max-width: 899px) {
+      .drag-handle { display: none; }
+    }
+
     /* Session bar */
     #session-bar {
       display: flex;
@@ -190,8 +366,6 @@
       font-size: 14px;
     }
 
-    #terminal { flex: 1; min-height: 0; width: 100%; }
-
     /* Toolbar */
     #toolbar {
       display: flex;
@@ -273,9 +447,40 @@
     <div id="btn-new-session" title="New session">＋</div>
   </div>
 
-  <!-- Terminal or empty state -->
-  <div id="no-session">No session — tap ＋ to start</div>
-  <div id="terminal" style="display:none"></div>
+  <!-- Main area: file list | drag | editor/preview | drag | terminal -->
+  <div id="main-area">
+
+    <!-- Col 1: file browser (desktop only) -->
+    <div id="file-browser">
+      <div id="file-browser-header">
+        <span id="fb-up" title="Up">↑</span>
+        <span id="fb-path">~/git</span>
+      </div>
+      <div id="fb-list"></div>
+    </div>
+
+    <div class="drag-handle" id="drag-1"></div>
+
+    <!-- Col 2: file preview/editor (desktop only) -->
+    <div id="editor-panel">
+      <div id="editor-header">
+        <span id="editor-filename">No file open</span>
+        <button id="editor-save" class="saved" style="display:none">Saved</button>
+        <span id="editor-close" style="display:none">×</span>
+      </div>
+      <div id="editor-placeholder">← click a file to preview</div>
+      <textarea id="editor-textarea" spellcheck="false"></textarea>
+    </div>
+
+    <div class="drag-handle" id="drag-2"></div>
+
+    <!-- Col 3: terminal -->
+    <div id="terminal-column">
+      <div id="no-session">No session — tap ＋ to start</div>
+      <div id="terminal" style="display:none"></div>
+    </div>
+
+  </div>
 
   <!-- Toolbar -->
   <div id="toolbar">
@@ -465,6 +670,7 @@
           showTerminal(true);
           renderTabs();
           setUrl(msg.dir, msg.name);
+          if (!fbCurrentPath) maybeFbLoad(msg.dir);
         }
       };
 
@@ -613,6 +819,216 @@
     function fitAndScroll() { fitAddon.fit(); term.scrollToBottom(); }
     window.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
     window.visualViewport?.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
+
+    // ── File browser ─────────────────────────────────────────────────────────
+    let fbCurrentPath = null; // null = not yet loaded
+    let fbActiveFile  = null;
+    let editorDirty   = false;
+
+    function fbLoad(dir) {
+      fetch('/api/files?path=' + encodeURIComponent(dir))
+        .then(r => r.json())
+        .then(({ path: p, items }) => {
+          fbCurrentPath = p;
+          document.getElementById('fb-path').textContent =
+            p.replace(location.origin, '').replace(/^.*\/git\//, '~/git/');
+          const list = document.getElementById('fb-list');
+          list.innerHTML = '';
+          items.forEach(item => {
+            const el = document.createElement('div');
+            el.className = 'fb-item' + (fbActiveFile === p + '/' + item.name ? ' active' : '');
+            el.innerHTML = `<span class="fb-icon">${item.isDir ? '📂' : fileIcon(item.name)}</span>
+                            <span>${item.name}</span>`;
+            el.title = item.name;
+            el.addEventListener('click', () => {
+              const fullPath = p + '/' + item.name;
+              if (item.isDir) {
+                fbLoad(fullPath);
+              } else {
+                openFile(fullPath, el);
+              }
+            });
+            list.appendChild(el);
+          });
+        })
+        .catch(() => {});
+    }
+
+    function fileIcon(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      const icons = { js: '📜', ts: '📜', jsx: '📜', tsx: '📜', py: '🐍', json: '{}',
+                      md: '📝', html: '🌐', css: '🎨', sh: '⚙', yml: '⚙', yaml: '⚙',
+                      txt: '📄', go: '🔷', rs: '🦀', java: '☕', rb: '💎' };
+      return icons[ext] || '📄';
+    }
+
+    function openFile(filePath, itemEl) {
+      if (editorDirty) {
+        if (!confirm('Discard unsaved changes?')) return;
+      }
+      document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+      if (itemEl) itemEl.classList.add('active');
+      fbActiveFile = filePath;
+
+      fetch('/api/file?path=' + encodeURIComponent(filePath))
+        .then(r => r.json())
+        .then(({ content, error }) => {
+          if (error) { alert('Cannot open: ' + error); return; }
+          const ta = document.getElementById('editor-textarea');
+          const ph = document.getElementById('editor-placeholder');
+          const fname = document.getElementById('editor-filename');
+          const saveBtn = document.getElementById('editor-save');
+          const closeBtn = document.getElementById('editor-close');
+          fname.textContent = filePath.split('/').pop();
+          fname.title = filePath;
+          ta.value = content;
+          ta.style.display = 'block';
+          ph.style.display = 'none';
+          saveBtn.style.display = '';
+          closeBtn.style.display = '';
+          editorDirty = false;
+          markSaved(true);
+          setTimeout(() => fitAndScroll(), 60);
+        })
+        .catch(() => alert('Failed to load file'));
+    }
+
+    function markSaved(saved) {
+      const btn = document.getElementById('editor-save');
+      if (saved) {
+        btn.textContent = 'Saved';
+        btn.classList.add('saved');
+      } else {
+        btn.textContent = 'Save';
+        btn.classList.remove('saved');
+      }
+    }
+
+    document.getElementById('editor-textarea').addEventListener('input', () => {
+      if (!editorDirty) {
+        editorDirty = true;
+        markSaved(false);
+      }
+    });
+
+    // Tab key in editor → insert spaces
+    document.getElementById('editor-textarea').addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const ta = e.target;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        editorDirty = true;
+        markSaved(false);
+      }
+      // Ctrl/Cmd+S to save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveFile();
+      }
+    });
+
+    document.getElementById('editor-save').addEventListener('click', saveFile);
+
+    function saveFile() {
+      if (!fbActiveFile) return;
+      const content = document.getElementById('editor-textarea').value;
+      fetch('/api/file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: fbActiveFile, content }),
+      })
+        .then(r => r.json())
+        .then(({ ok, error }) => {
+          if (ok) { editorDirty = false; markSaved(true); }
+          else alert('Save failed: ' + error);
+        })
+        .catch(() => alert('Save request failed'));
+    }
+
+    document.getElementById('editor-close').addEventListener('click', () => {
+      if (editorDirty && !confirm('Discard unsaved changes?')) return;
+      // Reset to placeholder state (panel stays visible on desktop)
+      document.getElementById('editor-textarea').style.display = 'none';
+      document.getElementById('editor-placeholder').style.display = '';
+      document.getElementById('editor-filename').textContent = 'No file open';
+      document.getElementById('editor-save').style.display = 'none';
+      document.getElementById('editor-close').style.display = 'none';
+      document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+      fbActiveFile = null;
+      editorDirty = false;
+      setTimeout(() => fitAndScroll(), 60);
+    });
+
+    document.getElementById('fb-up').addEventListener('click', () => {
+      if (!fbCurrentPath) return;
+      const parent = fbCurrentPath.split('/').slice(0, -1).join('/');
+      if (parent && parent.length >= (location.origin + '/').length) fbLoad(parent);
+    });
+
+    // Bootstrap file browser on page load if desktop + dir in URL
+    (function initFb() {
+      const dir = dirFromPath();
+      if (dir && window.matchMedia('(min-width: 900px)').matches) {
+        fetch('/api/dirs')
+          .then(r => r.json())
+          .then(({ base }) => { if (base) fbLoad(base + '/' + dir); })
+          .catch(() => {});
+      }
+    })();
+
+    // Auto-load file browser to the project dir when a session is attached
+    function maybeFbLoad(dir) {
+      if (!window.matchMedia('(min-width: 900px)').matches) return;
+      if (!dir) return;
+      fetch('/api/dirs')
+        .then(r => r.json())
+        .then(({ base }) => { if (base) fbLoad(base + '/' + dir); })
+        .catch(() => {});
+    }
+
+    // ── Drag-to-resize panels ─────────────────────────────────────────────────
+    function makeDraggable(handleId, leftPanel, rightPanel) {
+      const handle = document.getElementById(handleId);
+      if (!handle) return;
+      let dragging = false;
+      let startX, startLeft, startRight;
+
+      handle.addEventListener('mousedown', (e) => {
+        dragging = true;
+        startX = e.clientX;
+        startLeft  = leftPanel.getBoundingClientRect().width;
+        startRight = rightPanel.getBoundingClientRect().width;
+        handle.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const newLeft  = Math.max(120, startLeft + dx);
+        const newRight = Math.max(120, startRight - dx);
+        leftPanel.style.width  = newLeft  + 'px';
+        rightPanel.style.width = newRight + 'px';
+        fitAndScroll();
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        fitAndScroll();
+      });
+    }
+
+    makeDraggable('drag-1', document.getElementById('file-browser'),  document.getElementById('editor-panel'));
+    makeDraggable('drag-2', document.getElementById('editor-panel'),   document.getElementById('terminal-column'));
   </script>
 </body>
 </html>
