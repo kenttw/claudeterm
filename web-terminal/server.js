@@ -63,7 +63,7 @@ const wss = new WebSocketServer({
   },
 });
 
-const BASE_DIR  = process.env.HOME + '/git';
+const DEFAULT_BASE = process.env.HOME + '/git';
 
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 const CONFIG_DEFAULTS = { claudeCommand: 'claude', user: 'admin', pass: 'admin' };
@@ -75,6 +75,8 @@ if (!fs.existsSync(CONFIG_FILE)) {
   try { config = { ...CONFIG_DEFAULTS, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) }; }
   catch (e) { console.error('[config] Failed to parse config.json, using defaults'); }
 }
+
+let BASE_DIR = config.baseDir || DEFAULT_BASE;
 const CLAUDE_CMD = config.claudeCommand || 'claude';
 const AUTH_USER  = process.env.WEB_TERM_USER || config.user || 'admin';
 const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
@@ -130,11 +132,11 @@ app.get('/api/dirs', (req, res) => {
 app.use(express.json({ limit: '2mb' }));
 
 // ── File browser API ──────────────────────────────────────────────────────────
+const HOME_DIR = process.env.HOME || '/Users/kent';
 function safePath(p) {
   if (!p) return null;
   const resolved = path.resolve(p);
-  // Allow access only under BASE_DIR
-  if (!resolved.startsWith(BASE_DIR + path.sep) && resolved !== BASE_DIR) return null;
+  if (!resolved.startsWith(HOME_DIR + path.sep) && resolved !== HOME_DIR) return null;
   return resolved;
 }
 
@@ -144,7 +146,6 @@ app.get('/api/files', (req, res) => {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const items = entries
-      .filter(e => !e.name.startsWith('.'))
       .map(e => ({ name: e.name, isDir: e.isDirectory() }))
       .sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
@@ -449,9 +450,46 @@ wss.on('connection', (ws) => {
   });
 });
 
-const PORT = process.env.PORT || 7681;
-server.listen(PORT, () => {
-  console.log(`Web terminal running at http://localhost:${PORT}`);
-  console.log(`Credentials: ${AUTH_USER} / ${'*'.repeat(AUTH_PASS.length)}`);
-  console.log(`Base dir: ${BASE_DIR}`);
-});
+// ── First-run: prompt for base directory if no sessions and no saved baseDir ──
+function hasAnySessions() {
+  try {
+    const entries = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true });
+    return entries.some(e => e.isDirectory() && fs.existsSync(path.join(SESSIONS_DIR, e.name, 'sessions.json')));
+  } catch { return false; }
+}
+
+function askBaseDir() {
+  return new Promise((resolve) => {
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`\n📂 Base directory for projects [${DEFAULT_BASE}]: `, (answer) => {
+      rl.close();
+      const dir = answer.trim() || DEFAULT_BASE;
+      const resolved = path.resolve(dir);
+      if (!fs.existsSync(resolved)) {
+        console.log(`⚠  Directory "${resolved}" does not exist, using default: ${DEFAULT_BASE}`);
+        resolve(DEFAULT_BASE);
+      } else {
+        resolve(resolved);
+      }
+    });
+  });
+}
+
+async function start() {
+  if (!config.baseDir && !hasAnySessions()) {
+    BASE_DIR = await askBaseDir();
+    config.baseDir = BASE_DIR;
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    console.log(`[config] Saved baseDir: ${BASE_DIR}`);
+  }
+
+  const PORT = process.env.PORT || 7681;
+  server.listen(PORT, () => {
+    console.log(`Web terminal running at http://localhost:${PORT}`);
+    console.log(`Credentials: ${AUTH_USER} / ${'*'.repeat(AUTH_PASS.length)}`);
+    console.log(`Base dir: ${BASE_DIR}`);
+  });
+}
+
+start();

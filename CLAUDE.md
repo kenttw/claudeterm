@@ -11,8 +11,11 @@ Mac :7681  ←WebSocket→  Mobile Browser
 ## Start / Stop
 
 ```bash
-# Start (must be run from the web-terminal directory)
-chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper
+# First run — interactive (prompts for base directory)
+cd web-terminal && chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper
+SHELL=/bin/zsh node server.js
+
+# Subsequent runs — background (base dir already saved in config.json)
 SHELL=/bin/zsh nohup node server.js > /tmp/web-terminal.log 2>&1 &
 
 # Stop
@@ -21,6 +24,16 @@ kill $(lsof -ti:7681)
 # View logs
 tail -f /tmp/web-terminal.log
 ```
+
+### First-Run Setup
+
+On first launch (no sessions exist and no `baseDir` in `config.json`), the server prompts in the CLI:
+
+```
+📂 Base directory for projects [/Users/<you>/git]:
+```
+
+Press Enter for default (`~/git`) or type a custom path. The choice is saved to `config.json` as `baseDir` and never asked again.
 
 Connection URL: `http://<your-local-ip>:7681` (phone must be on the same WiFi as Mac)
 Default credentials: `admin / admin`
@@ -33,7 +46,7 @@ Default credentials: `admin / admin`
 |-------|------------|
 | Shell bridge | `node-pty` — real pseudo-terminal |
 | Transport | WebSocket (`ws`) — bidirectional input/output |
-| Frontend | `xterm.js` v5.3 + `xterm-addon-fit` |
+| Frontend | `xterm.js` v5.3 + `xterm-addon-fit` + `highlight.js` + `marked.js` |
 | Server | `express` + Node.js |
 
 ### Known Issues & Fixes
@@ -121,7 +134,59 @@ Each subdirectory maps to a URL:
 - Session tab bar only shows sessions belonging to the current URL's directory
 - Switching session tabs → URL updates automatically
 - Browser back/forward navigates between sessions
-- Base directory: `~/git` (controlled by `BASE_DIR`)
+- Base directory: configurable via `config.json` `baseDir` (default: `~/git`)
+
+---
+
+## Desktop File Browser & Editor (>=900px only)
+
+On desktop browsers, the layout becomes three resizable columns:
+
+```
+[ File Browser | File Preview/Editor | Terminal ]
+```
+
+### File Browser (left column)
+
+- Auto-loads project directory from URL when session attaches
+- Shows all files including hidden (`.git`, `.env`, etc.)
+- Click folder → navigate into; `↑` button → go up
+- Click file → opens in editor panel
+- `⇄` button → open directory picker to switch root directory
+
+### File Preview/Editor (middle column)
+
+Three viewing modes toggled via buttons in the header:
+
+| Mode | Behavior |
+|------|----------|
+| **Edit** | Editable textarea, Tab inserts 2 spaces, Cmd/Ctrl+S saves |
+| **Code** | Read-only with syntax highlighting (highlight.js) |
+| **Preview** | Rendered markdown (marked.js) — only for `.md` files |
+
+Default mode by file type:
+- `.md` → Preview (with Edit/Code/Preview toggles)
+- `.py`, `.js`, `.json`, etc. → Code (with Edit/Code toggles)
+- `.ipynb` → Notebook view (rendered cells with syntax highlighting + markdown)
+
+### Drag-to-Resize
+
+Green drag handles between panels. Drag to resize any column freely (min 120px each).
+
+### Server APIs
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/files?path=` | List directory contents (under `~/`) |
+| `GET /api/file?path=` | Read file (max 2MB) |
+| `POST /api/file` | Write file `{ path, content }` |
+
+### Directory Picker
+
+The session directory picker supports navigation:
+- `↑` button to go up to parent directories
+- Click a folder to select it for session creation
+- When opened via `⇄` (file browser switch), click navigates into dirs and "✓ Use this directory" confirms
 
 ---
 
@@ -140,7 +205,9 @@ Each subdirectory maps to a URL:
 | claude | `claude\r` + rename session to "Claude" |
 | ▲▼◀▶ | ANSI arrow sequences |
 
-The session `×` close button has double-confirm protection: first click turns it `?` (orange), a second click within 2 seconds confirms the kill.
+The session `×` close button has a confirm modal (Cancel / Close).
+
+Connection badges: when multiple clients are connected to the same session, a `●N` badge shows the count.
 
 ---
 
@@ -163,18 +230,30 @@ claudeterm/
 │       └── sessions.json
 └── web-terminal/
     ├── server.js           # Express + WebSocket + node-pty server
+    ├── config.json          # User config (baseDir, claudeCommand, credentials)
     ├── package.json
     ├── package-lock.json
     └── public/
-        └── index.html      # Frontend: xterm.js + session bar + toolbar + dir picker
+        └── index.html      # Frontend: xterm.js + file browser + editor + toolbar
 ```
 
 ---
 
-## Environment Variables
+## Configuration
+
+### config.json
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `baseDir` | `~/git` | Base directory for projects (set on first run) |
+| `claudeCommand` | `claude` | Command to launch Claude Code |
+| `user` | `admin` | Basic Auth username |
+| `pass` | `admin` | Basic Auth password |
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WEB_TERM_USER` | `admin` | Basic Auth username |
-| `WEB_TERM_PASS` | `admin` | Basic Auth password |
+| `WEB_TERM_USER` | `admin` | Basic Auth username (overrides config.json) |
+| `WEB_TERM_PASS` | `admin` | Basic Auth password (overrides config.json) |
 | `PORT` | `7681` | Listening port |

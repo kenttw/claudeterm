@@ -5,8 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>ClaudeTerm</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/vs2015.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/markdown.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/languages/yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.1/marked.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #1e1e1e; overflow: hidden; display: flex; flex-direction: column; }
@@ -67,6 +75,8 @@
       flex-shrink: 0;
     }
     #fb-up:hover { color: #fff; }
+    #fb-switch { cursor: pointer; padding: 2px 5px; color: #888; font-size: 12px; flex-shrink: 0; }
+    #fb-switch:hover { color: #fff; }
     #fb-list {
       flex: 1;
       overflow-y: auto;
@@ -141,6 +151,34 @@
       padding: 0 2px;
     }
     #editor-close:hover { color: #f66; }
+    .editor-modes { display: none; gap: 2px; flex-shrink: 0; }
+    .editor-modes button { padding: 1px 7px; font-size: 10px; font-family: Menlo, Monaco, monospace; background: #333; color: #888; border: 1px solid #444; border-radius: 3px; cursor: pointer; }
+    .editor-modes button:hover { color: #ccc; border-color: #666; }
+    .editor-modes button.active { background: #0e8; color: #000; border-color: #0e8; }
+    #editor-code-view { display: none; flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #444 transparent; }
+    #editor-code-view pre { margin: 0; padding: 10px; font-size: 13px; font-family: Menlo, Monaco, "Courier New", monospace; line-height: 1.5; tab-size: 2; background: #1e1e1e !important; }
+    #editor-code-view pre code { background: transparent !important; }
+    #editor-preview { display: none; flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; color: #d4d4d4; line-height: 1.6; scrollbar-width: thin; scrollbar-color: #444 transparent; }
+    #editor-preview h1,#editor-preview h2,#editor-preview h3 { color: #fff; margin: 16px 0 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
+    #editor-preview h1 { font-size: 1.6em; } #editor-preview h2 { font-size: 1.3em; } #editor-preview h3 { font-size: 1.1em; border: none; }
+    #editor-preview code { background: #2a2a2a; padding: 2px 5px; border-radius: 3px; font-family: Menlo, Monaco, monospace; font-size: 0.9em; }
+    #editor-preview pre { background: #2a2a2a; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #editor-preview pre code { padding: 0; background: transparent; }
+    #editor-preview table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    #editor-preview th,#editor-preview td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
+    #editor-preview th { background: #2a2a2a; color: #fff; }
+    #editor-preview a { color: #4da6ff; } #editor-preview blockquote { border-left: 3px solid #555; padding-left: 12px; color: #999; margin: 8px 0; }
+    #editor-preview ul,#editor-preview ol { padding-left: 24px; margin: 6px 0; } #editor-preview img { max-width: 100%; }
+    #editor-notebook { display: none; flex: 1; min-height: 0; overflow: auto; padding: 10px; scrollbar-width: thin; scrollbar-color: #444 transparent; }
+    .nb-cell { margin-bottom: 8px; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+    .nb-cell-header { font-size: 10px; font-family: Menlo, Monaco, monospace; color: #666; padding: 3px 8px; background: #252526; border-bottom: 1px solid #333; }
+    .nb-cell-code pre { margin: 0; padding: 8px; font-size: 12px; line-height: 1.4; background: #1e1e1e !important; }
+    .nb-cell-code pre code { background: transparent !important; }
+    .nb-cell-md { padding: 8px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #d4d4d4; line-height: 1.5; }
+    .nb-cell-md h1,.nb-cell-md h2,.nb-cell-md h3 { color: #fff; margin: 8px 0 4px; }
+    .nb-cell-md code { background: #2a2a2a; padding: 1px 4px; border-radius: 3px; font-family: Menlo, Monaco, monospace; font-size: 0.9em; }
+    .nb-cell-md pre { background: #2a2a2a; padding: 8px; border-radius: 4px; overflow-x: auto; } .nb-cell-md pre code { padding: 0; background: transparent; }
+    .nb-cell-output { padding: 6px 8px; background: #1a1a2e; border-top: 1px solid #333; font-family: Menlo, Monaco, monospace; font-size: 12px; color: #aaa; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; }
     #editor-placeholder {
       flex: 1;
       display: flex;
@@ -274,13 +312,17 @@
       overflow: hidden;
     }
     #dir-picker-header {
-      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
       font-size: 13px;
       color: #888;
       font-family: Menlo, Monaco, monospace;
       border-bottom: 1px solid #444;
       flex-shrink: 0;
     }
+    #dir-picker-up:hover { color: #fff; }
     #dir-list {
       overflow-y: auto;
       flex: 1;
@@ -453,8 +495,12 @@
   <!-- Directory picker modal -->
   <div id="dir-modal">
     <div id="dir-picker">
-      <div id="dir-picker-header">📁 ~/git — Select directory</div>
+      <div id="dir-picker-header">
+        <span id="dir-picker-up" title="Up" style="cursor:pointer;font-size:14px;color:#888">↑</span>
+        <span id="dir-picker-path" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d4d4d4">~/git</span>
+      </div>
       <div id="dir-list"></div>
+      <div id="dir-picker-select" style="display:none;padding:12px;text-align:center;color:#0e8;font-size:13px;font-family:Menlo,Monaco,monospace;font-weight:bold;cursor:pointer;border-top:1px solid #444">✓ Use this directory</div>
       <div id="dir-cancel">Cancel</div>
     </div>
   </div>
@@ -473,6 +519,7 @@
       <div id="file-browser-header">
         <span id="fb-up" title="Up">↑</span>
         <span id="fb-path">~/git</span>
+        <span id="fb-switch" title="Switch directory">⇄</span>
       </div>
       <div id="fb-list"></div>
     </div>
@@ -483,11 +530,19 @@
     <div id="editor-panel">
       <div id="editor-header">
         <span id="editor-filename">No file open</span>
+        <span class="editor-modes" id="editor-modes">
+          <button data-mode="edit">Edit</button>
+          <button data-mode="code" class="active">Code</button>
+          <button data-mode="preview" id="btn-mode-preview" style="display:none">Preview</button>
+        </span>
         <button id="editor-save" class="saved" style="display:none">Saved</button>
         <span id="editor-close" style="display:none">×</span>
       </div>
       <div id="editor-placeholder">← click a file to preview</div>
       <textarea id="editor-textarea" spellcheck="false"></textarea>
+      <div id="editor-code-view"><pre><code></code></pre></div>
+      <div id="editor-preview"></div>
+      <div id="editor-notebook"></div>
     </div>
 
     <div class="drag-handle" id="drag-2"></div>
@@ -769,31 +824,61 @@
 
     const dirModal = document.getElementById('dir-modal');
     const dirList  = document.getElementById('dir-list');
+    let dirPickerPath = null;
+    let dirPickerBrowse = false;
+    let dirPickerOnSelect = null;
 
-    function openDirPicker() {
-      dirList.innerHTML = '<div class="dir-item" style="color:#666">Loading...</div>';
+    function openDirPicker(opts = {}) {
+      dirPickerBrowse = !!opts.browseMode;
+      dirPickerOnSelect = opts.onSelect || null;
+      document.getElementById('dir-picker-select').style.display = dirPickerBrowse ? '' : 'none';
       dirModal.classList.add('show');
       fetch('/api/dirs')
         .then(r => r.json())
-        .then(({ base, dirs }) => {
+        .then(({ base }) => dirPickerNav(base))
+        .catch(() => dirPickerNav('/Users/kent/git'));
+    }
+
+    function dirPickerNav(dirPath) {
+      dirPickerPath = dirPath;
+      document.getElementById('dir-picker-path').textContent = dirPath.replace(/^\/Users\/[^/]+/, '~');
+      dirList.innerHTML = '<div class="dir-item" style="color:#666">Loading...</div>';
+      fetch('/api/files?path=' + encodeURIComponent(dirPath))
+        .then(r => r.json())
+        .then(({ path: p, items }) => {
+          dirPickerPath = p;
+          document.getElementById('dir-picker-path').textContent = p.replace(/^\/Users\/[^/]+/, '~');
           dirList.innerHTML = '';
-          dirs.forEach(d => {
+          items.filter(i => i.isDir).forEach(d => {
             const item = document.createElement('div');
             item.className = 'dir-item';
-            item.innerHTML = `<span>📂</span><span>${d}</span>`;
+            item.innerHTML = `<span>📂</span><span>${d.name}</span>`;
             item.addEventListener('click', () => {
-              dirModal.classList.remove('show');
-              // Navigate to /<dir> — the URL change triggers auto-attach or create
-              history.pushState({}, '', '/' + d);
-              autoAttachFromUrl();
+              if (dirPickerBrowse) {
+                dirPickerNav(p + '/' + d.name);
+              } else {
+                dirModal.classList.remove('show');
+                history.pushState({}, '', '/' + d.name);
+                autoAttachFromUrl();
+              }
             });
             dirList.appendChild(item);
           });
         })
-        .catch(() => {
-          dirList.innerHTML = '<div class="dir-item" style="color:#f66">Failed to load</div>';
-        });
+        .catch(() => { dirList.innerHTML = '<div class="dir-item" style="color:#f66">Failed to load</div>'; });
     }
+
+    document.getElementById('dir-picker-up').addEventListener('click', () => {
+      if (!dirPickerPath) return;
+      const parent = dirPickerPath.split('/').slice(0, -1).join('/');
+      if (parent && parent.length >= 1) dirPickerNav(parent);
+    });
+
+    document.getElementById('dir-picker-select').addEventListener('click', () => {
+      if (!dirPickerPath) return;
+      dirModal.classList.remove('show');
+      if (dirPickerOnSelect) dirPickerOnSelect(dirPickerPath);
+    });
 
     document.getElementById('btn-new-session').addEventListener('click', () => {
       const dir = dirFromPath();
@@ -922,32 +1007,118 @@
       return icons[ext] || '📄';
     }
 
-    function openFile(filePath, itemEl) {
-      if (editorDirty) {
-        if (!confirm('Discard unsaved changes?')) return;
+    // ── Editor modes ───────────────────────────────────────────────────────
+    let editorMode = 'code';
+    let editorLang = '';
+
+    function extToLang(name) {
+      const ext = name.split('.').pop().toLowerCase();
+      const m = { py:'python', js:'javascript', ts:'typescript', jsx:'javascript', tsx:'typescript',
+        json:'json', md:'markdown', sh:'bash', bash:'bash', yml:'yaml', yaml:'yaml',
+        html:'xml', css:'css', go:'go', rs:'rust', java:'java', rb:'ruby', sql:'sql', xml:'xml' };
+      return m[ext] || 'plaintext';
+    }
+    function isNotebook(n) { return n.endsWith('.ipynb'); }
+    function isMarkdown(n) { return /\.md$/i.test(n); }
+    function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function hideAllViews() {
+      ['editor-textarea','editor-code-view','editor-preview','editor-notebook','editor-placeholder'].forEach(
+        id => document.getElementById(id).style.display = 'none');
+    }
+
+    function showView(mode) {
+      hideAllViews();
+      editorMode = mode;
+      document.querySelectorAll('.editor-modes button').forEach(b =>
+        b.classList.toggle('active', b.dataset.mode === mode));
+      const ta = document.getElementById('editor-textarea');
+      if (mode === 'edit') {
+        ta.style.display = 'block';
+      } else if (mode === 'code') {
+        const codeEl = document.querySelector('#editor-code-view pre code');
+        codeEl.textContent = ta.value;
+        codeEl.className = editorLang ? ('language-' + editorLang) : '';
+        hljs.highlightElement(codeEl);
+        document.getElementById('editor-code-view').style.display = 'block';
+      } else if (mode === 'preview') {
+        document.getElementById('editor-preview').innerHTML = marked.parse(ta.value);
+        document.querySelectorAll('#editor-preview pre code').forEach(el => hljs.highlightElement(el));
+        document.getElementById('editor-preview').style.display = 'block';
+      } else if (mode === 'notebook') {
+        document.getElementById('editor-notebook').style.display = 'block';
       }
+    }
+
+    document.getElementById('editor-modes').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-mode]');
+      if (btn) showView(btn.dataset.mode);
+    });
+
+    function renderNotebook(content) {
+      let nb;
+      try { nb = JSON.parse(content); } catch { return '<div style="color:#f66;padding:12px">Invalid notebook JSON</div>'; }
+      const cells = nb.cells || [];
+      const lang = nb.metadata?.kernelspec?.language || 'python';
+      let html = '';
+      cells.forEach(cell => {
+        const src = (cell.source || []).join('');
+        if (cell.cell_type === 'code') {
+          const hl = hljs.highlight(src, { language: lang, ignoreIllegals: true }).value;
+          html += `<div class="nb-cell"><div class="nb-cell-header">In [${cell.execution_count ?? ' '}]</div>
+            <div class="nb-cell-code"><pre><code class="language-${lang}">${hl}</code></pre></div>`;
+          (cell.outputs || []).forEach(o => {
+            let t = '';
+            if (o.text) t = [].concat(o.text).join('');
+            else if (o.data?.['text/plain']) t = [].concat(o.data['text/plain']).join('');
+            if (o.traceback) t = o.traceback.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+            if (t) html += `<div class="nb-cell-output">${escHtml(t)}</div>`;
+          });
+          html += '</div>';
+        } else if (cell.cell_type === 'markdown') {
+          html += `<div class="nb-cell"><div class="nb-cell-header">Markdown</div>
+            <div class="nb-cell-md">${marked.parse(src)}</div></div>`;
+        }
+      });
+      return html || '<div style="color:#666;padding:12px">Empty notebook</div>';
+    }
+
+    function openFile(filePath, itemEl) {
+      if (editorDirty && !confirm('Discard unsaved changes?')) return;
       document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
       if (itemEl) itemEl.classList.add('active');
       fbActiveFile = filePath;
+      const fileName = filePath.split('/').pop();
+      editorLang = extToLang(fileName);
 
       fetch('/api/file?path=' + encodeURIComponent(filePath))
         .then(r => r.json())
         .then(({ content, error }) => {
           if (error) { alert('Cannot open: ' + error); return; }
           const ta = document.getElementById('editor-textarea');
-          const ph = document.getElementById('editor-placeholder');
-          const fname = document.getElementById('editor-filename');
-          const saveBtn = document.getElementById('editor-save');
-          const closeBtn = document.getElementById('editor-close');
-          fname.textContent = filePath.split('/').pop();
-          fname.title = filePath;
+          const modes = document.getElementById('editor-modes');
+          const previewBtn = document.getElementById('btn-mode-preview');
+          document.getElementById('editor-filename').textContent = fileName;
+          document.getElementById('editor-filename').title = filePath;
           ta.value = content;
-          ta.style.display = 'block';
-          ph.style.display = 'none';
-          saveBtn.style.display = '';
-          closeBtn.style.display = '';
           editorDirty = false;
           markSaved(true);
+          document.getElementById('editor-save').style.display = '';
+          document.getElementById('editor-close').style.display = '';
+          modes.style.display = 'flex';
+
+          if (isNotebook(fileName)) {
+            previewBtn.style.display = 'none';
+            document.getElementById('editor-notebook').innerHTML = renderNotebook(content);
+            showView('notebook');
+            document.getElementById('editor-save').style.display = 'none';
+          } else if (isMarkdown(fileName)) {
+            previewBtn.style.display = '';
+            showView('preview');
+          } else {
+            previewBtn.style.display = 'none';
+            showView('code');
+          }
           setTimeout(() => fitAndScroll(), 60);
         })
         .catch(() => alert('Failed to load file'));
@@ -955,67 +1126,47 @@
 
     function markSaved(saved) {
       const btn = document.getElementById('editor-save');
-      if (saved) {
-        btn.textContent = 'Saved';
-        btn.classList.add('saved');
-      } else {
-        btn.textContent = 'Save';
-        btn.classList.remove('saved');
-      }
+      btn.textContent = saved ? 'Saved' : 'Save';
+      btn.classList.toggle('saved', saved);
     }
 
     document.getElementById('editor-textarea').addEventListener('input', () => {
-      if (!editorDirty) {
-        editorDirty = true;
-        markSaved(false);
-      }
+      if (!editorDirty) { editorDirty = true; markSaved(false); }
     });
 
-    // Tab key in editor → insert spaces
     document.getElementById('editor-textarea').addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
-        const ta = e.target;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(end);
-        ta.selectionStart = ta.selectionEnd = start + 2;
-        editorDirty = true;
-        markSaved(false);
+        const ta = e.target, s = ta.selectionStart, end = ta.selectionEnd;
+        ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(end);
+        ta.selectionStart = ta.selectionEnd = s + 2;
+        editorDirty = true; markSaved(false);
       }
-      // Ctrl/Cmd+S to save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        saveFile();
-      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile(); }
     });
 
     document.getElementById('editor-save').addEventListener('click', saveFile);
 
     function saveFile() {
       if (!fbActiveFile) return;
-      const content = document.getElementById('editor-textarea').value;
       fetch('/api/file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: fbActiveFile, content }),
-      })
-        .then(r => r.json())
-        .then(({ ok, error }) => {
-          if (ok) { editorDirty = false; markSaved(true); }
-          else alert('Save failed: ' + error);
-        })
-        .catch(() => alert('Save request failed'));
+        body: JSON.stringify({ path: fbActiveFile, content: document.getElementById('editor-textarea').value }),
+      }).then(r => r.json()).then(({ ok, error }) => {
+        if (ok) { editorDirty = false; markSaved(true); }
+        else alert('Save failed: ' + error);
+      }).catch(() => alert('Save request failed'));
     }
 
     document.getElementById('editor-close').addEventListener('click', () => {
       if (editorDirty && !confirm('Discard unsaved changes?')) return;
-      // Reset to placeholder state (panel stays visible on desktop)
-      document.getElementById('editor-textarea').style.display = 'none';
+      hideAllViews();
       document.getElementById('editor-placeholder').style.display = '';
       document.getElementById('editor-filename').textContent = 'No file open';
       document.getElementById('editor-save').style.display = 'none';
       document.getElementById('editor-close').style.display = 'none';
+      document.getElementById('editor-modes').style.display = 'none';
       document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
       fbActiveFile = null;
       editorDirty = false;
@@ -1025,23 +1176,21 @@
     document.getElementById('fb-up').addEventListener('click', () => {
       if (!fbCurrentPath) return;
       const parent = fbCurrentPath.split('/').slice(0, -1).join('/');
-      if (parent && parent.length >= (location.origin + '/').length) fbLoad(parent);
+      if (parent && parent.length >= 1) fbLoad(parent);
     });
 
-    // Bootstrap file browser on page load if desktop + dir in URL
-    (function initFb() {
-      const dir = dirFromPath();
-      if (dir && window.matchMedia('(min-width: 900px)').matches) {
-        fetch('/api/dirs')
-          .then(r => r.json())
-          .then(({ base }) => { if (base) fbLoad(base + '/' + dir); })
-          .catch(() => {});
-      }
-    })();
+    // ⇄ switch button opens dir picker in browse mode for file browser
+    document.getElementById('fb-switch').addEventListener('click', () => {
+      openDirPicker({
+        browseMode: true,
+        onSelect: (fullPath) => fbLoad(fullPath)
+      });
+    });
 
-    // Auto-load file browser to the project dir when a session is attached
+    // Auto-load file browser from URL project dir when session attaches
     function maybeFbLoad(dir) {
       if (!window.matchMedia('(min-width: 900px)').matches) return;
+      if (fbCurrentPath) return;
       if (!dir) return;
       fetch('/api/dirs')
         .then(r => r.json())
