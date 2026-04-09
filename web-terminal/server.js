@@ -27,9 +27,9 @@ function validateToken(token) {
   return true;
 }
 
-// ── Rate limiter (max 10 failed attempts per IP per 15 min) ──────────────────
+// ── Rate limiter (max 50 failed attempts per IP per 15 min) ──────────────────
 const authFailures = new Map(); // ip → { count, resetAt }
-const RATE_LIMIT = 10;
+const RATE_LIMIT = 50;
 const RATE_WINDOW = 15 * 60 * 1000;
 
 function checkRateLimit(ip) {
