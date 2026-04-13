@@ -151,12 +151,44 @@
       padding: 0 2px;
     }
     #editor-close:hover { color: #f66; }
+    #editor-tabs {
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+      background: #252526;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #editor-tabs:empty { display: none; }
+    #editor-tabs::-webkit-scrollbar { display: none; }
+    .editor-tab {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 5px 8px 5px 10px;
+      font-size: 11px;
+      font-family: Menlo, Monaco, monospace;
+      color: #888;
+      cursor: pointer;
+      white-space: nowrap;
+      border-right: 1px solid #2a2a2a;
+      user-select: none;
+      max-width: 160px;
+      flex-shrink: 0;
+    }
+    .editor-tab:hover { color: #ccc; background: #2a2d2e; }
+    .editor-tab.active { color: #fff; background: #1e1e1e; border-bottom: 2px solid #0e8; }
+    .editor-tab .tab-name { overflow: hidden; text-overflow: ellipsis; max-width: 115px; }
+    .editor-tab.dirty .tab-name::after { content: ' ●'; color: #f90; font-size: 9px; }
+    .editor-tab .tab-close { color: #555; font-size: 12px; flex-shrink: 0; padding: 0 1px; }
+    .editor-tab .tab-close:hover { color: #f66; }
     .editor-modes { display: none; gap: 2px; flex-shrink: 0; }
     .editor-modes button { padding: 1px 7px; font-size: 10px; font-family: Menlo, Monaco, monospace; background: #333; color: #888; border: 1px solid #444; border-radius: 3px; cursor: pointer; }
     .editor-modes button:hover { color: #ccc; border-color: #666; }
     .editor-modes button.active { background: #0e8; color: #000; border-color: #0e8; }
-    #editor-code-view { display: none; flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #444 transparent; }
-    #editor-code-view pre { margin: 0; padding: 10px; font-size: 13px; font-family: Menlo, Monaco, "Courier New", monospace; line-height: 1.5; tab-size: 2; background: #1e1e1e !important; }
+    #editor-code-view { display: none; flex: 1; min-height: 0; overflow: hidden; flex-direction: row; }
+    #editor-line-nums { padding: 10px 8px; text-align: right; color: #555; font-size: 13px; font-family: Menlo, Monaco, "Courier New", monospace; line-height: 1.5; user-select: none; border-right: 1px solid #2d2d2d; background: #1a1a1a; flex-shrink: 0; overflow: hidden; white-space: pre; min-width: 36px; }
+    #editor-code-view pre { flex: 1; margin: 0; padding: 10px; font-size: 13px; font-family: Menlo, Monaco, "Courier New", monospace; line-height: 1.5; tab-size: 2; background: #1e1e1e !important; overflow: auto; scrollbar-width: thin; scrollbar-color: #444 transparent; }
     #editor-code-view pre code { background: transparent !important; }
     #editor-preview { display: none; flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 14px; color: #d4d4d4; line-height: 1.6; scrollbar-width: thin; scrollbar-color: #444 transparent; }
     #editor-preview h1,#editor-preview h2,#editor-preview h3 { color: #fff; margin: 16px 0 8px; border-bottom: 1px solid #333; padding-bottom: 4px; }
@@ -173,12 +205,20 @@
     .nb-cell { margin-bottom: 8px; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
     .nb-cell-header { font-size: 10px; font-family: Menlo, Monaco, monospace; color: #666; padding: 3px 8px; background: #252526; border-bottom: 1px solid #333; }
     .nb-cell-code pre { margin: 0; padding: 8px; font-size: 12px; line-height: 1.4; background: #1e1e1e !important; }
-    .nb-cell-code pre code { background: transparent !important; }
+    .nb-cell-code pre code { background: transparent !important; color: #d4d4d4; }
     .nb-cell-md { padding: 8px 12px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; color: #d4d4d4; line-height: 1.5; }
     .nb-cell-md h1,.nb-cell-md h2,.nb-cell-md h3 { color: #fff; margin: 8px 0 4px; }
     .nb-cell-md code { background: #2a2a2a; padding: 1px 4px; border-radius: 3px; font-family: Menlo, Monaco, monospace; font-size: 0.9em; }
     .nb-cell-md pre { background: #2a2a2a; padding: 8px; border-radius: 4px; overflow-x: auto; } .nb-cell-md pre code { padding: 0; background: transparent; }
     .nb-cell-output { padding: 6px 8px; background: #1a1a2e; border-top: 1px solid #333; font-family: Menlo, Monaco, monospace; font-size: 12px; color: #aaa; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow: auto; }
+    #editor-image { display: none; flex: 1; min-height: 0; overflow: auto; padding: 10px; text-align: center; background: #181818; }
+    #editor-image img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
+    #editor-html-preview { display: none; flex: 1; min-height: 0; border: none; background: #fff; }
+    #editor-csv { display: none; flex: 1; min-height: 0; overflow: auto; padding: 10px; scrollbar-width: thin; scrollbar-color: #444 transparent; }
+    #editor-csv table { border-collapse: collapse; width: 100%; font-family: Menlo, Monaco, monospace; font-size: 12px; }
+    #editor-csv th { background: #2a2a2a; color: #fff; padding: 6px 10px; border: 1px solid #444; text-align: left; position: sticky; top: 0; }
+    #editor-csv td { padding: 5px 10px; border: 1px solid #333; color: #d4d4d4; }
+    #editor-csv tr:hover td { background: #2a2d2e; }
     #editor-placeholder {
       flex: 1;
       display: flex;
@@ -528,6 +568,7 @@
 
     <!-- Col 2: file preview/editor (desktop only) -->
     <div id="editor-panel">
+      <div id="editor-tabs"></div>
       <div id="editor-header">
         <span id="editor-filename">No file open</span>
         <span class="editor-modes" id="editor-modes">
@@ -540,9 +581,12 @@
       </div>
       <div id="editor-placeholder">← click a file to preview</div>
       <textarea id="editor-textarea" spellcheck="false"></textarea>
-      <div id="editor-code-view"><pre><code></code></pre></div>
+      <div id="editor-code-view"><div id="editor-line-nums"></div><pre><code></code></pre></div>
       <div id="editor-preview"></div>
       <div id="editor-notebook"></div>
+      <div id="editor-image"></div>
+      <div id="editor-csv"></div>
+      <iframe id="editor-html-preview" sandbox="allow-scripts allow-same-origin" style="display:none"></iframe>
     </div>
 
     <div class="drag-handle" id="drag-2"></div>
@@ -785,7 +829,34 @@
           showTerminal(true);
           renderTabs();
           setUrl(msg.dir, msg.name);
-          if (!fbCurrentPath) maybeFbLoad(msg.dir);
+          // Clear open file tabs for previous session
+          openFiles = [];
+          currentFileIdx = -1;
+          editorDirty = false;
+          hideAllViews();
+          document.getElementById('editor-placeholder').style.display = 'flex';
+          document.getElementById('editor-filename').textContent = 'No file open';
+          document.getElementById('editor-save').style.display = 'none';
+          document.getElementById('editor-close').style.display = 'none';
+          document.getElementById('editor-modes').style.display = 'none';
+          document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+          renderFileTabs();
+          // Always update file browser to this session's project dir
+          maybeFbLoad(msg.dir);
+          // Restore open files for this session
+          if (msg.openFilesList && msg.openFilesList.length > 0) {
+            setTimeout(() => restoreOpenFiles(msg.openFilesList, msg.openFilesActive || 0), 300);
+          } else if (msg.lastOpenFile) {
+            setTimeout(() => openFile(msg.lastOpenFile, null), 300);
+          }
+          // Force terminal refresh
+          setTimeout(() => {
+            fitAddon.fit();
+            term.scrollToBottom();
+            const { cols, rows } = term;
+            if (ws.readyState === WebSocket.OPEN)
+              ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+          }, 100);
         }
       };
 
@@ -969,6 +1040,8 @@
     let fbCurrentPath = null; // null = not yet loaded
     let fbActiveFile  = null;
     let editorDirty   = false;
+    let openFiles = []; // [{path, fileName, content, dirty, mode}]
+    let currentFileIdx = -1;
 
     function fbLoad(dir) {
       fetch('/api/files?path=' + encodeURIComponent(dir))
@@ -981,16 +1054,17 @@
           list.innerHTML = '';
           items.forEach(item => {
             const el = document.createElement('div');
-            el.className = 'fb-item' + (fbActiveFile === p + '/' + item.name ? ' active' : '');
+            const fullItemPath = p + '/' + item.name;
+            el.className = 'fb-item' + (fbActiveFile === fullItemPath ? ' active' : '');
+            el.dataset.path = fullItemPath;
             el.innerHTML = `<span class="fb-icon">${item.isDir ? '📂' : fileIcon(item.name)}</span>
                             <span>${item.name}</span>`;
             el.title = item.name;
             el.addEventListener('click', () => {
-              const fullPath = p + '/' + item.name;
               if (item.isDir) {
-                fbLoad(fullPath);
+                fbLoad(fullItemPath);
               } else {
-                openFile(fullPath, el);
+                openFile(fullItemPath, el);
               }
             });
             list.appendChild(el);
@@ -1003,7 +1077,9 @@
       const ext = name.split('.').pop().toLowerCase();
       const icons = { js: '📜', ts: '📜', jsx: '📜', tsx: '📜', py: '🐍', json: '{}',
                       md: '📝', html: '🌐', css: '🎨', sh: '⚙', yml: '⚙', yaml: '⚙',
-                      txt: '📄', go: '🔷', rs: '🦀', java: '☕', rb: '💎' };
+                      txt: '📄', go: '🔷', rs: '🦀', java: '☕', rb: '💎',
+                      png: '🖼', jpg: '🖼', jpeg: '🖼', gif: '🖼', svg: '🖼', webp: '🖼',
+                      csv: '📊', tsv: '📊', ipynb: '📓' };
       return icons[ext] || '📄';
     }
 
@@ -1020,10 +1096,13 @@
     }
     function isNotebook(n) { return n.endsWith('.ipynb'); }
     function isMarkdown(n) { return /\.md$/i.test(n); }
+    function isHtml(n) { return /\.html?$/i.test(n); }
+    function isImage(n) { return /\.(png|jpg|jpeg|gif|svg|webp|bmp|ico)$/i.test(n); }
+    function isCsv(n) { return /\.(csv|tsv)$/i.test(n); }
     function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
     function hideAllViews() {
-      ['editor-textarea','editor-code-view','editor-preview','editor-notebook','editor-placeholder'].forEach(
+      ['editor-textarea','editor-code-view','editor-preview','editor-notebook','editor-image','editor-csv','editor-html-preview'].forEach(
         id => document.getElementById(id).style.display = 'none');
     }
 
@@ -1037,14 +1116,29 @@
         ta.style.display = 'block';
       } else if (mode === 'code') {
         const codeEl = document.querySelector('#editor-code-view pre code');
-        codeEl.textContent = ta.value;
-        codeEl.className = editorLang ? ('language-' + editorLang) : '';
-        hljs.highlightElement(codeEl);
-        document.getElementById('editor-code-view').style.display = 'block';
+        const lang = (editorLang && hljs.getLanguage(editorLang)) ? editorLang : 'plaintext';
+        let hl;
+        try { hl = hljs.highlight(ta.value, { language: lang, ignoreIllegals: true }).value; }
+        catch { hl = escHtml(ta.value); }
+        codeEl.innerHTML = hl;
+        codeEl.className = 'hljs language-' + lang;
+        const lineNums = document.getElementById('editor-line-nums');
+        const lineCount = ta.value.split('\n').length;
+        lineNums.textContent = Array.from({length: lineCount}, (_, i) => i + 1).join('\n');
+        const pre = document.querySelector('#editor-code-view pre');
+        pre.onscroll = () => { lineNums.scrollTop = pre.scrollTop; };
+        document.getElementById('editor-code-view').style.display = 'flex';
       } else if (mode === 'preview') {
-        document.getElementById('editor-preview').innerHTML = marked.parse(ta.value);
-        document.querySelectorAll('#editor-preview pre code').forEach(el => hljs.highlightElement(el));
-        document.getElementById('editor-preview').style.display = 'block';
+        const curFile = currentFileIdx >= 0 ? openFiles[currentFileIdx] : null;
+        if (curFile && isHtml(curFile.fileName)) {
+          const iframe = document.getElementById('editor-html-preview');
+          iframe.srcdoc = ta.value;
+          iframe.style.display = 'block';
+        } else {
+          document.getElementById('editor-preview').innerHTML = marked.parse(ta.value);
+          document.querySelectorAll('#editor-preview pre code').forEach(el => hljs.highlightElement(el));
+          document.getElementById('editor-preview').style.display = 'block';
+        }
       } else if (mode === 'notebook') {
         document.getElementById('editor-notebook').style.display = 'block';
       }
@@ -1052,74 +1146,283 @@
 
     document.getElementById('editor-modes').addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-mode]');
-      if (btn) showView(btn.dataset.mode);
+      if (btn) {
+        showView(btn.dataset.mode);
+        if (currentFileIdx >= 0) openFiles[currentFileIdx].mode = btn.dataset.mode;
+      }
     });
 
     function renderNotebook(content) {
       let nb;
       try { nb = JSON.parse(content); } catch { return '<div style="color:#f66;padding:12px">Invalid notebook JSON</div>'; }
+      if (!nb || typeof nb !== 'object') return '<div style="color:#f66;padding:12px">Invalid notebook JSON</div>';
       const cells = nb.cells || [];
-      const lang = nb.metadata?.kernelspec?.language || 'python';
+      const rawLang = (nb.metadata?.kernelspec?.language || 'python').toLowerCase().trim();
+      const lang = hljs.getLanguage(rawLang) ? rawLang : 'python';
       let html = '';
-      cells.forEach(cell => {
-        const src = (cell.source || []).join('');
-        if (cell.cell_type === 'code') {
-          const hl = hljs.highlight(src, { language: lang, ignoreIllegals: true }).value;
-          html += `<div class="nb-cell"><div class="nb-cell-header">In [${cell.execution_count ?? ' '}]</div>
-            <div class="nb-cell-code"><pre><code class="language-${lang}">${hl}</code></pre></div>`;
-          (cell.outputs || []).forEach(o => {
-            let t = '';
-            if (o.text) t = [].concat(o.text).join('');
-            else if (o.data?.['text/plain']) t = [].concat(o.data['text/plain']).join('');
-            if (o.traceback) t = o.traceback.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
-            if (t) html += `<div class="nb-cell-output">${escHtml(t)}</div>`;
-          });
-          html += '</div>';
-        } else if (cell.cell_type === 'markdown') {
-          html += `<div class="nb-cell"><div class="nb-cell-header">Markdown</div>
-            <div class="nb-cell-md">${marked.parse(src)}</div></div>`;
-        }
-      });
+      try {
+        cells.forEach(cell => {
+          const src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+          if (cell.cell_type === 'code') {
+            let hl;
+            try { hl = hljs.highlight(src, { language: lang, ignoreIllegals: true }).value; }
+            catch { hl = escHtml(src); }
+            html += `<div class="nb-cell"><div class="nb-cell-header">In [${cell.execution_count ?? ' '}]</div>
+              <div class="nb-cell-code"><pre><code class="hljs language-${lang}">${hl}</code></pre></div>`;
+            (cell.outputs || []).forEach(o => {
+              let t = '';
+              if (o.text) t = [].concat(o.text).join('');
+              else if (o.data?.['text/plain']) t = [].concat(o.data['text/plain']).join('');
+              if (o.traceback) t = o.traceback.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+              if (t) html += `<div class="nb-cell-output">${escHtml(t)}</div>`;
+            });
+            html += '</div>';
+          } else if (cell.cell_type === 'markdown') {
+            html += `<div class="nb-cell"><div class="nb-cell-header">Markdown</div>
+              <div class="nb-cell-md">${marked.parse(src)}</div></div>`;
+          }
+        });
+      } catch(e) {
+        return `<div style="color:#f66;padding:12px">Notebook render error: ${escHtml(String(e))}</div>`;
+      }
       return html || '<div style="color:#666;padding:12px">Empty notebook</div>';
     }
 
-    function openFile(filePath, itemEl) {
-      if (editorDirty && !confirm('Discard unsaved changes?')) return;
-      document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
-      if (itemEl) itemEl.classList.add('active');
-      fbActiveFile = filePath;
-      const fileName = filePath.split('/').pop();
-      editorLang = extToLang(fileName);
+    function renderCsv(content, fileName) {
+      const sep = /\.tsv$/i.test(fileName) ? '\t' : ',';
+      const rows = content.split('\n').filter(r => r.trim());
+      if (rows.length === 0) return '<div style="color:#666;padding:12px">Empty file</div>';
+      // Simple CSV parse (handles quoted fields)
+      function parseLine(line) {
+        const cells = []; let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') { inQ = !inQ; }
+          else if (c === sep && !inQ) { cells.push(cur); cur = ''; }
+          else { cur += c; }
+        }
+        cells.push(cur);
+        return cells;
+      }
+      const header = parseLine(rows[0]);
+      let html = '<table><thead><tr>' + header.map(h => `<th>${escHtml(h.trim())}</th>`).join('') + '</tr></thead><tbody>';
+      for (let i = 1; i < Math.min(rows.length, 1000); i++) {
+        const cols = parseLine(rows[i]);
+        html += '<tr>' + cols.map(c => `<td>${escHtml(c.trim())}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      if (rows.length > 1000) html += `<div style="color:#888;padding:8px;font-size:12px">Showing 1000 of ${rows.length} rows</div>`;
+      return html;
+    }
 
+    function renderFileTabs() {
+      const bar = document.getElementById('editor-tabs');
+      bar.innerHTML = openFiles.map((f, i) =>
+        `<div class="editor-tab${i === currentFileIdx ? ' active' : ''}${f.dirty ? ' dirty' : ''}" data-idx="${i}">` +
+        `<span class="tab-name" title="${escHtml(f.path)}">${escHtml(f.fileName)}</span>` +
+        `<span class="tab-close" data-close="${i}">×</span></div>`
+      ).join('');
+      bar.querySelectorAll('.editor-tab').forEach(el => {
+        el.addEventListener('click', (e) => {
+          if (e.target.dataset.close !== undefined) return;
+          switchToTab(parseInt(el.dataset.idx));
+        });
+        el.querySelector('.tab-close').addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeTab(parseInt(e.target.dataset.close));
+        });
+      });
+    }
+
+    function syncSessionFiles() {
+      if (!currentSessionId || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({
+        type: 'session.setFiles',
+        id: currentSessionId,
+        paths: openFiles.map(f => f.path),
+        activeIdx: currentFileIdx >= 0 ? currentFileIdx : 0,
+      }));
+    }
+
+    async function restoreOpenFiles(paths, activeIdx) {
+      for (const filePath of paths) {
+        try {
+          const fileName = filePath.split('/').pop();
+          if (isImage(fileName)) {
+            openFiles.push({ path: filePath, fileName, content: null, dirty: false, mode: 'image' });
+            continue;
+          }
+          const r = await fetch('/api/file?path=' + encodeURIComponent(filePath));
+          const { content, error } = await r.json();
+          if (error) continue;
+          let defaultMode;
+          if (isNotebook(fileName)) defaultMode = 'notebook';
+          else if (isCsv(fileName)) defaultMode = 'csv';
+          else if (isMarkdown(fileName) || isHtml(fileName)) defaultMode = 'preview';
+          else defaultMode = 'code';
+          openFiles.push({ path: filePath, fileName, content, dirty: false, mode: defaultMode });
+        } catch (e) { /* skip missing files */ }
+      }
+      if (openFiles.length > 0) {
+        currentFileIdx = Math.min(activeIdx, openFiles.length - 1);
+        showTabContent(currentFileIdx);
+        document.querySelectorAll('.fb-item[data-path]').forEach(el => {
+          el.classList.toggle('active', el.dataset.path === fbActiveFile);
+        });
+      }
+      renderFileTabs();
+    }
+
+    function saveCurrentTabState() {
+      if (currentFileIdx < 0 || currentFileIdx >= openFiles.length) return;
+      const tab = openFiles[currentFileIdx];
+      if (tab.mode !== 'image' && tab.mode !== 'notebook' && tab.mode !== 'csv') {
+        tab.content = document.getElementById('editor-textarea').value;
+      }
+      tab.dirty = editorDirty;
+      tab.mode = editorMode;
+    }
+
+    function switchToTab(idx) {
+      if (idx === currentFileIdx) return;
+      saveCurrentTabState();
+      currentFileIdx = idx;
+      showTabContent(idx);
+      renderFileTabs();
+      const filePath = openFiles[idx].path;
+      document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+      document.querySelectorAll('.fb-item[data-path]').forEach(el => {
+        if (el.dataset.path === filePath) el.classList.add('active');
+      });
+      fbActiveFile = filePath;
+      syncSessionFiles();
+    }
+
+    function closeTab(idx) {
+      const tab = openFiles[idx];
+      if (tab.dirty && !confirm('Discard unsaved changes in ' + tab.fileName + '?')) return;
+      openFiles.splice(idx, 1);
+      if (openFiles.length === 0) {
+        currentFileIdx = -1;
+        hideAllViews();
+        document.getElementById('editor-placeholder').style.display = 'flex';
+        document.getElementById('editor-filename').textContent = 'No file open';
+        document.getElementById('editor-save').style.display = 'none';
+        document.getElementById('editor-close').style.display = 'none';
+        document.getElementById('editor-modes').style.display = 'none';
+        document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+        fbActiveFile = null;
+        editorDirty = false;
+        syncSessionFiles();
+        renderFileTabs();
+      } else {
+        const newIdx = Math.min(idx, openFiles.length - 1);
+        currentFileIdx = newIdx;
+        showTabContent(newIdx);
+        renderFileTabs();
+        document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+        document.querySelectorAll('.fb-item[data-path]').forEach(el => {
+          if (el.dataset.path === openFiles[newIdx].path) el.classList.add('active');
+        });
+        fbActiveFile = openFiles[newIdx].path;
+        syncSessionFiles();
+      }
+      setTimeout(() => fitAndScroll(), 60);
+    }
+
+    function showTabContent(idx) {
+      const tab = openFiles[idx];
+      document.getElementById('editor-placeholder').style.display = 'none';
+      editorDirty = tab.dirty;
+      editorMode = tab.mode;
+      editorLang = extToLang(tab.fileName);
+      fbActiveFile = tab.path;
+      document.getElementById('editor-filename').textContent = tab.fileName;
+      document.getElementById('editor-filename').title = tab.path;
+      document.getElementById('editor-close').style.display = '';
+      markSaved(!tab.dirty);
+      const ta = document.getElementById('editor-textarea');
+      const modes = document.getElementById('editor-modes');
+      const previewBtn = document.getElementById('btn-mode-preview');
+      if (isImage(tab.fileName)) {
+        hideAllViews();
+        document.getElementById('editor-image').innerHTML = `<img src="/api/file/raw?path=${encodeURIComponent(tab.path)}" alt="${escHtml(tab.fileName)}">`;
+        document.getElementById('editor-image').style.display = 'block';
+        document.getElementById('editor-save').style.display = 'none';
+        modes.style.display = 'none';
+        setTimeout(() => fitAndScroll(), 60);
+        return;
+      }
+      ta.value = tab.content || '';
+      document.getElementById('editor-save').style.display = '';
+      modes.style.display = 'flex';
+      if (isNotebook(tab.fileName)) {
+        previewBtn.style.display = 'none';
+        document.getElementById('editor-notebook').innerHTML = renderNotebook(tab.content);
+        showView('notebook');
+        document.getElementById('editor-save').style.display = 'none';
+      } else if (isCsv(tab.fileName)) {
+        previewBtn.style.display = 'none';
+        document.getElementById('editor-csv').innerHTML = renderCsv(tab.content, tab.fileName);
+        hideAllViews();
+        document.getElementById('editor-csv').style.display = 'block';
+        editorMode = 'csv';
+        document.querySelectorAll('.editor-modes button').forEach(b => b.classList.remove('active'));
+      } else if (tab.mode === 'edit') {
+        previewBtn.style.display = (isMarkdown(tab.fileName) || isHtml(tab.fileName)) ? '' : 'none';
+        showView('edit');
+      } else if (tab.mode === 'preview' && (isMarkdown(tab.fileName) || isHtml(tab.fileName))) {
+        previewBtn.style.display = '';
+        showView('preview');
+      } else {
+        previewBtn.style.display = (isMarkdown(tab.fileName) || isHtml(tab.fileName)) ? '' : 'none';
+        showView('code');
+      }
+      setTimeout(() => fitAndScroll(), 60);
+    }
+
+    function openFile(filePath, itemEl) {
+      // Switch to existing tab if already open
+      const existingIdx = openFiles.findIndex(f => f.path === filePath);
+      if (existingIdx !== -1) {
+        switchToTab(existingIdx);
+        document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+        if (itemEl) itemEl.classList.add('active');
+        return;
+      }
+      saveCurrentTabState();
+      const fileName = filePath.split('/').pop();
+      // Image files
+      if (isImage(fileName)) {
+        const tab = { path: filePath, fileName, content: null, dirty: false, mode: 'image' };
+        openFiles.push(tab);
+        currentFileIdx = openFiles.length - 1;
+        renderFileTabs();
+        showTabContent(currentFileIdx);
+        document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+        if (itemEl) itemEl.classList.add('active');
+        fbActiveFile = filePath;
+        syncSessionFiles();
+        return;
+      }
       fetch('/api/file?path=' + encodeURIComponent(filePath))
         .then(r => r.json())
         .then(({ content, error }) => {
           if (error) { alert('Cannot open: ' + error); return; }
-          const ta = document.getElementById('editor-textarea');
-          const modes = document.getElementById('editor-modes');
-          const previewBtn = document.getElementById('btn-mode-preview');
-          document.getElementById('editor-filename').textContent = fileName;
-          document.getElementById('editor-filename').title = filePath;
-          ta.value = content;
-          editorDirty = false;
-          markSaved(true);
-          document.getElementById('editor-save').style.display = '';
-          document.getElementById('editor-close').style.display = '';
-          modes.style.display = 'flex';
-
-          if (isNotebook(fileName)) {
-            previewBtn.style.display = 'none';
-            document.getElementById('editor-notebook').innerHTML = renderNotebook(content);
-            showView('notebook');
-            document.getElementById('editor-save').style.display = 'none';
-          } else if (isMarkdown(fileName)) {
-            previewBtn.style.display = '';
-            showView('preview');
-          } else {
-            previewBtn.style.display = 'none';
-            showView('code');
-          }
-          setTimeout(() => fitAndScroll(), 60);
+          let defaultMode;
+          if (isNotebook(fileName)) defaultMode = 'notebook';
+          else if (isCsv(fileName)) defaultMode = 'csv';
+          else if (isMarkdown(fileName) || isHtml(fileName)) defaultMode = 'preview';
+          else defaultMode = 'code';
+          const tab = { path: filePath, fileName, content, dirty: false, mode: defaultMode };
+          openFiles.push(tab);
+          currentFileIdx = openFiles.length - 1;
+          renderFileTabs();
+          showTabContent(currentFileIdx);
+          document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+          if (itemEl) itemEl.classList.add('active');
+          fbActiveFile = filePath;
+          syncSessionFiles();
         })
         .catch(() => alert('Failed to load file'));
     }
@@ -1131,7 +1434,11 @@
     }
 
     document.getElementById('editor-textarea').addEventListener('input', () => {
-      if (!editorDirty) { editorDirty = true; markSaved(false); }
+      if (!editorDirty) {
+        editorDirty = true;
+        markSaved(false);
+        if (currentFileIdx >= 0) { openFiles[currentFileIdx].dirty = true; renderFileTabs(); }
+      }
     });
 
     document.getElementById('editor-textarea').addEventListener('keydown', (e) => {
@@ -1141,6 +1448,7 @@
         ta.value = ta.value.substring(0, s) + '  ' + ta.value.substring(end);
         ta.selectionStart = ta.selectionEnd = s + 2;
         editorDirty = true; markSaved(false);
+        if (currentFileIdx >= 0) { openFiles[currentFileIdx].dirty = true; renderFileTabs(); }
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveFile(); }
     });
@@ -1154,23 +1462,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: fbActiveFile, content: document.getElementById('editor-textarea').value }),
       }).then(r => r.json()).then(({ ok, error }) => {
-        if (ok) { editorDirty = false; markSaved(true); }
+        if (ok) {
+          editorDirty = false; markSaved(true);
+          if (currentFileIdx >= 0) { openFiles[currentFileIdx].dirty = false; renderFileTabs(); }
+        }
         else alert('Save failed: ' + error);
       }).catch(() => alert('Save request failed'));
     }
 
     document.getElementById('editor-close').addEventListener('click', () => {
-      if (editorDirty && !confirm('Discard unsaved changes?')) return;
-      hideAllViews();
-      document.getElementById('editor-placeholder').style.display = '';
-      document.getElementById('editor-filename').textContent = 'No file open';
-      document.getElementById('editor-save').style.display = 'none';
-      document.getElementById('editor-close').style.display = 'none';
-      document.getElementById('editor-modes').style.display = 'none';
-      document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
-      fbActiveFile = null;
-      editorDirty = false;
-      setTimeout(() => fitAndScroll(), 60);
+      if (currentFileIdx >= 0) closeTab(currentFileIdx);
     });
 
     document.getElementById('fb-up').addEventListener('click', () => {
@@ -1187,10 +1488,9 @@
       });
     });
 
-    // Auto-load file browser from URL project dir when session attaches
+    // Load file browser to session's project dir (always updates on session switch)
     function maybeFbLoad(dir) {
       if (!window.matchMedia('(min-width: 900px)').matches) return;
-      if (fbCurrentPath) return;
       if (!dir) return;
       fetch('/api/dirs')
         .then(r => r.json())

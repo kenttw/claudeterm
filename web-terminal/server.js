@@ -8,29 +8,38 @@ const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 
+// ── Debug logging ─────────────────────────────────────────────────────────────
+const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+function dbg(...args) {
+  if (DEBUG) console.log(`[DEBUG ${new Date().toISOString()}]`, ...args);
+}
+
 // ── Auth tokens (WS cannot use Basic Auth — use short-lived tokens) ───────────
 const tokens = new Map(); // token → expiry timestamp
-const TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
+const TOKEN_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 function generateToken() {
   const token = require('crypto').randomBytes(32).toString('hex');
   tokens.set(token, Date.now() + TOKEN_TTL);
   // Clean up expired tokens
   for (const [t, exp] of tokens) if (Date.now() > exp) tokens.delete(t);
+  dbg(`Token generated, active tokens: ${tokens.size}`);
   return token;
 }
 
 function validateToken(token) {
-  if (!token || !tokens.has(token)) return false;
-  if (Date.now() > tokens.get(token)) { tokens.delete(token); return false; }
+  if (!token) { dbg('validateToken: no token provided'); return false; }
+  if (!tokens.has(token)) { dbg('validateToken: unknown token'); return false; }
+  if (Date.now() > tokens.get(token)) { tokens.delete(token); dbg('validateToken: token expired'); return false; }
   tokens.delete(token); // single-use
+  dbg('validateToken: OK');
   return true;
 }
 
-// ── Rate limiter (max 10 failed attempts per IP per 15 min) ──────────────────
+// ── Rate limiter (max failed attempts per IP per window) ─────────────────────
 const authFailures = new Map(); // ip → { count, resetAt }
-const RATE_LIMIT = 10;
-const RATE_WINDOW = 15 * 60 * 1000;
+const RATE_LIMIT = 500;
+const RATE_WINDOW = 60 * 60 * 1000; // 1 hour
 
 function checkRateLimit(ip) {
   const now = Date.now();
@@ -39,12 +48,18 @@ function checkRateLimit(ip) {
     authFailures.set(ip, { count: 0, resetAt: now + RATE_WINDOW });
     return true;
   }
+  if (entry.count >= RATE_LIMIT) {
+    dbg(`Rate limit hit for ${ip}: ${entry.count} failures`);
+  }
   return entry.count < RATE_LIMIT;
 }
 
 function recordFailure(ip) {
   const entry = authFailures.get(ip);
-  if (entry) entry.count++;
+  if (entry) {
+    entry.count++;
+    dbg(`Auth failure #${entry.count} from ${ip}`);
+  }
 }
 
 const wss = new WebSocketServer({
@@ -53,6 +68,7 @@ const wss = new WebSocketServer({
     const ip = req.socket.remoteAddress;
     const url = new URL(req.url, 'http://localhost');
     const token = url.searchParams.get('token');
+    dbg(`WS upgrade from ${ip} url=${req.url} hasToken=${!!token}`);
     if (validateToken(token)) {
       console.log(`${new Date().toISOString()} ${ip} WS connected`);
       done(true);
@@ -84,6 +100,7 @@ const AUTH_PASS  = process.env.WEB_TERM_PASS || config.pass || 'admin';
 app.use((req, res, next) => {
   const ip = req.socket.remoteAddress; // never trust X-Forwarded-For — can be spoofed
   const start = Date.now();
+  dbg(`→ ${req.method} ${req.path} from ${ip} auth=${!!req.headers.authorization}`);
   res.on('finish', () => {
     const ms = Date.now() - start;
     const line = `${new Date().toISOString()} ${ip} ${req.method} ${req.path} ${res.statusCode} ${ms}ms`;
@@ -93,11 +110,19 @@ app.use((req, res, next) => {
     }
   });
   if (!checkRateLimit(ip)) {
+    console.warn(`[RATE-LIMIT] ${ip} blocked on ${req.method} ${req.path}`);
     return res.status(429).send('Too Many Requests');
   }
   const auth = req.headers.authorization;
   const expected = 'Basic ' + Buffer.from(`${AUTH_USER}:${AUTH_PASS}`).toString('base64');
-  if (!auth || auth !== expected) {
+  if (!auth) {
+    dbg(`No Authorization header from ${ip}`);
+    recordFailure(ip);
+    res.set('WWW-Authenticate', 'Basic realm="Web Terminal"');
+    return res.status(401).send('Unauthorized');
+  }
+  if (auth !== expected) {
+    dbg(`Bad credentials from ${ip}`);
     recordFailure(ip);
     res.set('WWW-Authenticate', 'Basic realm="Web Terminal"');
     return res.status(401).send('Unauthorized');
@@ -170,6 +195,18 @@ app.get('/api/file', (req, res) => {
   }
 });
 
+app.get('/api/file/raw', (req, res) => {
+  const file = safePath(req.query.path);
+  if (!file) return res.status(400).send('Invalid path');
+  try {
+    const stat = fs.statSync(file);
+    if (stat.size > 10 * 1024 * 1024) return res.status(413).send('File too large');
+    res.sendFile(file);
+  } catch (e) {
+    res.status(500).send(e.message);
+  }
+});
+
 app.post('/api/file', (req, res) => {
   const { path: filePath, content } = req.body || {};
   const file = safePath(filePath);
@@ -214,13 +251,15 @@ function saveSessions() {
       type: s.type,
       cwd: s.cwd,
       claudeSessionId: s.claudeSessionId || null,
+      lastOpenFile: s.lastOpenFile || null,
     });
   }
 
   // Write per-folder sessions.json
   for (const [dir, list] of byDir) {
     try {
-      fs.writeFileSync(sessionsFileFor(dir), JSON.stringify({ sessions: list }, null, 2));
+      const df = dirOpenFiles.get(dir) || { paths: [], activeIdx: 0 };
+      fs.writeFileSync(sessionsFileFor(dir), JSON.stringify({ openFilesList: df.paths, openFilesActive: df.activeIdx, sessions: list }, null, 2));
     } catch (e) {
       console.error(`Failed to save sessions for ${dir}:`, e.message);
     }
@@ -249,7 +288,12 @@ function loadSavedSessions() {
       if (!fs.existsSync(file)) continue;
       try {
         const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-        all.push(...(data.sessions || []));
+        const sessList = data.sessions || [];
+        // Load dir-level open files (keyed by the first session's cwd)
+        if ((data.openFilesList || []).length > 0 && sessList.length > 0 && sessList[0].cwd) {
+          dirOpenFiles.set(sessList[0].cwd, { paths: data.openFilesList, activeIdx: data.openFilesActive || 0 });
+        }
+        all.push(...sessList);
       } catch (e) {
         console.error(`Failed to load ${file}:`, e.message);
       }
@@ -265,12 +309,14 @@ const CLAUDE_ID_RE = /\b(conv_[A-Za-z0-9]{10,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 
 // ── Sessions ──────────────────────────────────────────────────────────────────
 const sessions = new Map();
+const dirOpenFiles = new Map(); // cwd -> { paths: [], activeIdx: 0 }
 let sessionCounter = 1;
 
-function createSession(name, type = 'shell', autoCmd = null, savedId = null, claudeSessionId = null, cwd = null) {
+function createSession(name, type = 'shell', autoCmd = null, savedId = null, claudeSessionId = null, cwd = null, lastOpenFile = null) {
   const id = savedId || String(sessionCounter++);
   const sessionCwd = cwd || BASE_DIR;
 
+  console.log(`[session] Creating session id=${id} name="${name || `Session ${id}`}" type=${type} cwd=${sessionCwd} autoCmd=${autoCmd || 'none'}`);
   const shell = pty.spawn('/bin/zsh', [], {
     name: 'xterm-color',
     cols: 80,
@@ -278,6 +324,7 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
     cwd: sessionCwd,
     env: { ...process.env, SHELL: '/bin/zsh' },
   });
+  dbg(`PTY spawned pid=${shell.pid}`);
 
   const session = {
     id,
@@ -285,12 +332,14 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
     type,
     cwd: sessionCwd,
     claudeSessionId,
+    lastOpenFile,
     shell,
     clients: new Set(),
     buffer: '',
   };
 
   shell.onData((data) => {
+    dbg(`[session ${id}] PTY output ${data.length}b clients=${session.clients.size}`);
     session.buffer += data;
     if (session.buffer.length > 50000) session.buffer = session.buffer.slice(-50000);
 
@@ -321,7 +370,8 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
     }
   });
 
-  shell.onExit(() => {
+  shell.onExit(({ exitCode, signal }) => {
+    console.log(`[session ${id}] PTY exited exitCode=${exitCode} signal=${signal}`);
     sessions.delete(id);
     saveSessions();
     broadcast({ type: 'session.list', sessions: sessionList() });
@@ -331,7 +381,8 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
   saveSessions();
 
   if (autoCmd) {
-    setTimeout(() => shell.write(autoCmd), 1200);
+    dbg(`[session ${id}] Scheduling autoCmd in 1200ms: ${autoCmd}`);
+    setTimeout(() => { dbg(`[session ${id}] Writing autoCmd`); shell.write(autoCmd); }, 1200);
   }
 
   return session;
@@ -363,11 +414,11 @@ sessionCounter = savedList.reduce((max, s) => Math.max(max, parseInt(s.id) || 0)
 for (const s of savedList) {
   let autoCmd = null;
   if (s.type === 'claude') {
-    const resumeId = s.claudeSessionId || s.name.replace(/^[^\w]+/, '').trim();
+    const resumeId = s.name.replace(/^[^\w]+/, '').trim();
     autoCmd = `${CLAUDE_CMD} --resume ${resumeId}`;
     console.log(`[restore] "${s.name}" (${s.cwd}) → ${autoCmd}`);
   }
-  createSession(s.name, s.type || 'shell', autoCmd, s.id, s.claudeSessionId, s.cwd);
+  createSession(s.name, s.type || 'shell', autoCmd, s.id, s.claudeSessionId, s.cwd, s.lastOpenFile);
 }
 
 // Migrate: remove old central sessions.json if it exists
@@ -378,18 +429,21 @@ if (fs.existsSync(oldFile)) {
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const clientIp = req.socket.remoteAddress;
   let current = null;
+  console.log(`[ws] Client connected from ${clientIp}, total clients=${wss.clients.size}`);
 
   ws.send(JSON.stringify({ type: 'session.list', sessions: sessionList() }));
 
   ws.on('message', (raw) => {
     try {
-      if (raw.length > 64 * 1024) return; // 64 KB max message size
+      if (raw.length > 64 * 1024) { dbg(`[ws] Message too large (${raw.length}b) from ${clientIp}`); return; }
       const msg = JSON.parse(raw);
+      dbg(`[ws] Message type=${msg.type} from ${clientIp}`);
 
       if (msg.type === 'session.create') {
-        if (current) current.clients.delete(ws);
+        if (current) { dbg(`[ws] Detaching from session ${current.id}`); current.clients.delete(ws); }
         const type = msg.sessionType || 'shell';
         const autoCmd = type === 'claude' ? CLAUDE_CMD : null;
         let cwd = null;
@@ -398,20 +452,23 @@ wss.on('connection', (ws) => {
           const raw = msg.cwd.replace('__BASE__', BASE_DIR);
           const resolved = path.resolve(raw);
           if (resolved.startsWith(BASE_DIR)) cwd = resolved;
+          else dbg(`[ws] session.create: cwd rejected (outside BASE_DIR): ${resolved}`);
         }
+        console.log(`[ws] session.create name="${msg.name}" type=${type} cwd=${cwd || BASE_DIR}`);
         current = createSession(msg.name, type, autoCmd, null, null, cwd);
         current.clients.add(ws);
-        ws.send(JSON.stringify({ type: 'session.attached', id: current.id, name: current.name, sessionType: current.type, dir: path.basename(current.cwd) }));
+        ws.send(JSON.stringify({ type: 'session.attached', id: current.id, name: current.name, sessionType: current.type, dir: path.basename(current.cwd), lastOpenFile: current.lastOpenFile || null, openFilesList: (dirOpenFiles.get(current.cwd)||{}).paths||[], openFilesActive: (dirOpenFiles.get(current.cwd)||{}).activeIdx||0 }));
         broadcast({ type: 'session.list', sessions: sessionList() });
       }
 
       if (msg.type === 'session.attach') {
         const session = sessions.get(msg.id);
-        if (!session) return;
+        if (!session) { dbg(`[ws] session.attach: unknown id=${msg.id}`); return; }
         if (current) current.clients.delete(ws);
         current = session;
         current.clients.add(ws);
-        ws.send(JSON.stringify({ type: 'session.attached', id: current.id, name: current.name, sessionType: current.type, dir: path.basename(current.cwd) }));
+        console.log(`[ws] Attached to session ${current.id} ("${current.name}") bufferLen=${current.buffer.length}`);
+        ws.send(JSON.stringify({ type: 'session.attached', id: current.id, name: current.name, sessionType: current.type, dir: path.basename(current.cwd), lastOpenFile: current.lastOpenFile || null, openFilesList: (dirOpenFiles.get(current.cwd)||{}).paths||[], openFilesActive: (dirOpenFiles.get(current.cwd)||{}).activeIdx||0 }));
         if (current.buffer) ws.send(JSON.stringify({ type: 'output', data: current.buffer }));
         broadcast({ type: 'session.list', sessions: sessionList() });
       }
@@ -419,16 +476,38 @@ wss.on('connection', (ws) => {
       if (msg.type === 'session.rename') {
         const session = sessions.get(msg.id);
         if (session) {
+          console.log(`[ws] Rename session ${msg.id}: "${session.name}" → "${msg.name}"`);
           session.name = String(msg.name || '').slice(0, 100);
-          if (msg.name === 'Claude' && session.type !== 'claude') session.type = 'claude';
+          if (msg.name === 'Claude' && session.type !== 'claude') { dbg(`[ws] Auto-upgrading session ${msg.id} to type=claude`); session.type = 'claude'; }
           saveSessions();
           broadcast({ type: 'session.list', sessions: sessionList() });
+        }
+      }
+
+      if (msg.type === 'session.setFile') {
+        const session = sessions.get(msg.id);
+        if (session) {
+          dbg(`[ws] session.setFile id=${msg.id} path=${msg.path}`);
+          session.lastOpenFile = msg.path || null;
+          saveSessions();
+        }
+      }
+
+      if (msg.type === 'session.setFiles') {
+        const session = sessions.get(msg.id);
+        if (session) {
+          const paths = msg.paths || [];
+          const activeIdx = msg.activeIdx || 0;
+          dirOpenFiles.set(session.cwd, { paths, activeIdx });
+          session.lastOpenFile = paths[activeIdx] || null;
+          saveSessions();
         }
       }
 
       if (msg.type === 'session.kill') {
         const session = sessions.get(msg.id);
         if (session) {
+          console.log(`[ws] Killing session ${msg.id} ("${session.name}")`);
           session.shell.kill();
           sessions.delete(msg.id);
           saveSessions();
@@ -436,17 +515,29 @@ wss.on('connection', (ws) => {
         }
       }
 
-      if (msg.type === 'input' && current) current.shell.write(msg.data);
-      if (msg.type === 'resize' && current) current.shell.resize(msg.cols, msg.rows);
+      if (msg.type === 'input' && current) {
+        dbg(`[ws] input to session ${current.id}: ${JSON.stringify(msg.data)}`);
+        current.shell.write(msg.data);
+      }
+      if (msg.type === 'resize' && current) {
+        dbg(`[ws] resize session ${current.id} to ${msg.cols}x${msg.rows}`);
+        current.shell.resize(msg.cols, msg.rows);
+      }
 
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.error(`[ws] Message parse error:`, e.message); }
   });
 
-  ws.on('close', () => {
+  ws.on('close', (code, reason) => {
+    console.log(`[ws] Client ${clientIp} disconnected code=${code} reason=${reason}`);
     if (current) {
       current.clients.delete(ws);
+      dbg(`[ws] Removed from session ${current.id}, remaining clients=${current.clients.size}`);
       broadcast({ type: 'session.list', sessions: sessionList() });
     }
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[ws] Error from ${clientIp}:`, err.message);
   });
 });
 
@@ -489,6 +580,7 @@ async function start() {
     console.log(`Web terminal running at http://localhost:${PORT}`);
     console.log(`Credentials: ${AUTH_USER} / ${'*'.repeat(AUTH_PASS.length)}`);
     console.log(`Base dir: ${BASE_DIR}`);
+    console.log(`Debug logging: ${DEBUG ? 'ON (set DEBUG=1 to enable)' : 'OFF (set DEBUG=1 to enable)'}`);
   });
 }
 
