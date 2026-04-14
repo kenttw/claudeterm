@@ -154,7 +154,7 @@ app.get('/api/dirs', (req, res) => {
   }
 });
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 // ── File browser API ──────────────────────────────────────────────────────────
 const HOME_DIR = process.env.HOME || '/Users/kent';
@@ -182,12 +182,40 @@ app.get('/api/files', (req, res) => {
   }
 });
 
+app.get('/api/git-status', (req, res) => {
+  const dir = safePath(req.query.path);
+  if (!dir) return res.status(400).json({ error: 'Invalid path' });
+  const { execSync } = require('child_process');
+  try {
+    const out = execSync('git status --porcelain -u', { cwd: dir, timeout: 3000, encoding: 'utf8' });
+    const files = {};
+    out.split('\n').forEach(line => {
+      if (!line.trim()) return;
+      const xy = line.substring(0, 2);
+      const file = line.substring(3).trim().replace(/^"(.*)"$/, '$1');
+      // X = index status, Y = worktree status
+      const x = xy[0], y = xy[1];
+      let status;
+      if (x === '?' && y === '?') status = 'untracked';
+      else if (x !== ' ' && x !== '?') status = 'staged';
+      else status = 'modified';
+      // store by filename only (last segment) and full relative path
+      files[file] = status;
+      const base = file.split('/').pop();
+      if (!files[base]) files[base] = status;
+    });
+    res.json({ files });
+  } catch {
+    res.json({ files: {} }); // not a git repo or git not found
+  }
+});
+
 app.get('/api/file', (req, res) => {
   const file = safePath(req.query.path);
   if (!file) return res.status(400).json({ error: 'Invalid path' });
   try {
     const stat = fs.statSync(file);
-    if (stat.size > 2 * 1024 * 1024) return res.status(413).json({ error: 'File too large' });
+    if (stat.size > 50 * 1024 * 1024) return res.status(413).json({ error: 'File too large' });
     const content = fs.readFileSync(file, 'utf8');
     res.json({ path: file, content });
   } catch (e) {
@@ -367,6 +395,14 @@ function createSession(name, type = 'shell', autoCmd = null, savedId = null, cla
       if (client.readyState === client.OPEN) {
         client.send(JSON.stringify({ type: 'output', data }));
       }
+    }
+
+    // Detect Claude confirmation/choice prompts and notify all clients
+    const plain = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
+    if (/\?\s*[\[(][yYnN\/]|yes\/no|\(y\/n\)|\[Y\/n\]|\[y\/N\]/i.test(plain) ||
+        /Do you want to|Would you like|Are you sure|Confirm|Proceed/i.test(plain) ||
+        /^\s*[1-9][.)]\s+\S/m.test(plain)) {
+      broadcast({ type: 'session.hint', id });
     }
   });
 

@@ -99,7 +99,12 @@
     }
     .fb-item:hover { background: #2a2d2e; }
     .fb-item.active { background: #37373d; color: #fff; }
-    .fb-item .fb-icon { flex-shrink: 0; font-size: 13px; }
+    .fb-item .fb-icon { flex-shrink: 0; font-size: 16px; }
+    .fb-item.git-modified > span:last-child { color: #e2c08d; }
+    .fb-item.git-staged   > span:last-child { color: #73c991; }
+    .fb-item.git-untracked > span:last-child { color: #73c991; }
+    .fb-item .fb-ask-btn { display: none; margin-left: auto; padding: 1px 5px; font-size: 11px; background: #0e8; color: #000; border: none; border-radius: 3px; cursor: pointer; flex-shrink: 0; line-height: 1.4; }
+    .fb-item:hover .fb-ask-btn { display: block; }
 
     /* Editor panel — desktop only, col 2 */
     #editor-panel {
@@ -316,6 +321,16 @@
       color: #5bf;
       opacity: 0.85;
       line-height: 1;
+    }
+    .session-tab .input-hint {
+      font-size: 11px;
+      color: #ff0;
+      animation: hint-pulse 1s ease-in-out infinite alternate;
+      line-height: 1;
+    }
+    @keyframes hint-pulse {
+      from { opacity: 0.5; }
+      to   { opacity: 1; }
     }
 
     #btn-new-session {
@@ -652,6 +667,7 @@
     let currentSessionId = null;
     let allSessions = [];
     let rateLimitTimerId = null;
+    const sessionNeedsInput = new Set(); // session ids waiting for user input
 
     function showRateLimit(retryAfter) {
       clearTimeout(rateLimitTimerId);
@@ -762,6 +778,14 @@
 
         tab.appendChild(label);
 
+        if (sessionNeedsInput.has(s.id) && !isActive) {
+          const hint = document.createElement('span');
+          hint.className = 'input-hint';
+          hint.textContent = '★';
+          hint.title = 'Waiting for input';
+          tab.appendChild(hint);
+        }
+
         if (s.clients > 1) {
           const badge = document.createElement('span');
           badge.className = 'conn-badge';
@@ -797,6 +821,13 @@
           term.write(msg.data, () => term.scrollToBottom());
         }
 
+        if (msg.type === 'session.hint') {
+          if (msg.id !== currentSessionId) {
+            sessionNeedsInput.add(msg.id);
+            renderTabs();
+          }
+        }
+
         if (msg.type === 'session.list') {
           const firstLoad = allSessions.length === 0;
           allSessions = msg.sessions;
@@ -825,6 +856,7 @@
 
         if (msg.type === 'session.attached') {
           currentSessionId = msg.id;
+          sessionNeedsInput.delete(msg.id);
           hideRateLimit();
           showTerminal(true);
           renderTabs();
@@ -1044,9 +1076,10 @@
     let currentFileIdx = -1;
 
     function fbLoad(dir) {
-      fetch('/api/files?path=' + encodeURIComponent(dir))
-        .then(r => r.json())
-        .then(({ path: p, items }) => {
+      Promise.all([
+        fetch('/api/files?path=' + encodeURIComponent(dir)).then(r => r.json()),
+        fetch('/api/git-status?path=' + encodeURIComponent(dir)).then(r => r.json()).catch(() => ({ files: {} }))
+      ]).then(([{ path: p, items }, { files: gitFiles }]) => {
           fbCurrentPath = p;
           document.getElementById('fb-path').textContent =
             p.replace(location.origin, '').replace(/^.*\/git\//, '~/git/');
@@ -1055,18 +1088,28 @@
           items.forEach(item => {
             const el = document.createElement('div');
             const fullItemPath = p + '/' + item.name;
-            el.className = 'fb-item' + (fbActiveFile === fullItemPath ? ' active' : '');
+            const gitStatus = gitFiles[item.name];
+            let cls = 'fb-item' + (fbActiveFile === fullItemPath ? ' active' : '');
+            if (gitStatus) cls += ' git-' + gitStatus;
+            el.className = cls;
             el.dataset.path = fullItemPath;
             el.innerHTML = `<span class="fb-icon">${item.isDir ? '📂' : fileIcon(item.name)}</span>
-                            <span>${item.name}</span>`;
+                            <span>${item.name}</span>${item.isDir ? '' : '<button class="fb-ask-btn" title="Ask Claude to read this file">Ask</button>'}`;
             el.title = item.name;
-            el.addEventListener('click', () => {
+            el.addEventListener('click', (e) => {
+              if (e.target.classList.contains('fb-ask-btn')) return;
               if (item.isDir) {
                 fbLoad(fullItemPath);
               } else {
                 openFile(fullItemPath, el);
               }
             });
+            if (!item.isDir) {
+              el.querySelector('.fb-ask-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                send('Read ' + fullItemPath + '\r');
+              });
+            }
             list.appendChild(el);
           });
         })
