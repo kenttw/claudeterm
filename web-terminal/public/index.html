@@ -309,6 +309,14 @@
     .session-tab.active { color: #fff; background: #1e1e1e; border-bottom: 2px solid #0e8; }
     .session-tab.claude-type { border-bottom-color: #f90; }
     .session-tab .claude-icon { font-size: 11px; opacity: 0.8; }
+    .session-tab .notes-btn {
+      font-size: 11px;
+      padding: 0 2px;
+      opacity: 0.4;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .session-tab .notes-btn:hover { opacity: 1; }
     .session-tab .kill {
       color: #666;
       font-size: 14px;
@@ -794,6 +802,16 @@
           tab.appendChild(badge);
         }
 
+        const notes = document.createElement('span');
+        notes.className = 'notes-btn';
+        notes.textContent = '📝';
+        notes.title = 'Session notes';
+        notes.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openSessionNotes(s);
+        });
+        tab.appendChild(notes);
+
         const kill = document.createElement('span');
         kill.className = 'kill';
         kill.textContent = '×';
@@ -805,6 +823,35 @@
         tab.appendChild(kill);
         container.appendChild(tab);
       });
+    }
+
+    async function openSessionNotes(session) {
+      const { base } = await fetch('/api/dirs').then(r => r.json());
+      const cleanName = session.name.replace(/^[^\w]+/, '').trim() || session.name;
+      const notesPath = base + '/' + session.dir + '/sessions/' + cleanName + '.md';
+      // Create file with template if it doesn't exist
+      const check = await fetch('/api/file?path=' + encodeURIComponent(notesPath)).then(r => r.json());
+      if (check.error) {
+        const template = [
+          '# ' + cleanName,
+          '',
+          '## Key Points',
+          '- ',
+          '',
+          '## Related Files',
+          '- ',
+          '',
+          '## Tickets / Confluence',
+          '- ',
+          '',
+        ].join('\n');
+        await fetch('/api/file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: notesPath, content: template })
+        });
+      }
+      openFile(notesPath, null);
     }
 
     function attachSession(id) {

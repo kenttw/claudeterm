@@ -241,6 +241,7 @@ app.post('/api/file', (req, res) => {
   if (!file) return res.status(400).json({ error: 'Invalid path' });
   if (typeof content !== 'string') return res.status(400).json({ error: 'No content' });
   try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content, 'utf8');
     res.json({ ok: true });
   } catch (e) {
