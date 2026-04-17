@@ -182,6 +182,18 @@ app.get('/api/files', (req, res) => {
   }
 });
 
+app.get('/api/git-branch', (req, res) => {
+  const dir = safePath(req.query.path);
+  if (!dir) return res.status(400).json({ error: 'Invalid path' });
+  const { execSync } = require('child_process');
+  try {
+    const branch = execSync('git branch --show-current', { cwd: dir, timeout: 2000, encoding: 'utf8' }).trim();
+    res.json({ branch });
+  } catch {
+    res.json({ branch: '' });
+  }
+});
+
 app.get('/api/git-status', (req, res) => {
   const dir = safePath(req.query.path);
   if (!dir) return res.status(400).json({ error: 'Invalid path' });
@@ -217,7 +229,18 @@ app.get('/api/file', (req, res) => {
     const stat = fs.statSync(file);
     if (stat.size > 50 * 1024 * 1024) return res.status(413).json({ error: 'File too large' });
     const content = fs.readFileSync(file, 'utf8');
-    res.json({ path: file, content });
+    res.json({ path: file, content, mtime: stat.mtimeMs });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/file-stat', (req, res) => {
+  const file = safePath(req.query.path);
+  if (!file) return res.status(400).json({ error: 'Invalid path' });
+  try {
+    const stat = fs.statSync(file);
+    res.json({ mtime: stat.mtimeMs });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

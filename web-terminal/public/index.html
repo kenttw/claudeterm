@@ -265,6 +265,12 @@
       #file-browser { display: flex; }
       #editor-panel { display: flex; }
       .drag-handle { display: block; }
+      #toolbar-branch { margin-left: auto !important; }
+    }
+
+    /* Hide branch badge on mobile (toolbar space too tight) */
+    @media (max-width: 899px) {
+      #toolbar-branch { display: none !important; }
     }
     @media (max-width: 899px) {
       .drag-handle { display: none; }
@@ -295,10 +301,10 @@
     .session-tab {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 6px 12px;
+      gap: 5px;
+      padding: 7px 14px;
       color: #888;
-      font-size: 12px;
+      font-size: 14px;
       font-family: Menlo, Monaco, monospace;
       cursor: pointer;
       white-space: nowrap;
@@ -493,9 +499,9 @@
     #toolbar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 6px;
+      justify-content: flex-start;
+      flex-wrap: nowrap;
+      gap: 4px;
       padding: 6px 8px;
       background: #2d2d2d;
       border-top: 1px solid #444;
@@ -503,11 +509,12 @@
     }
 
     #toolbar button {
+      flex: 1;
       background: #3a3a3a;
       color: #d4d4d4;
       border: 1px solid #555;
       border-radius: 6px;
-      padding: 8px 12px;
+      padding: 8px 4px;
       font-size: 13px;
       font-family: Menlo, Monaco, monospace;
       cursor: pointer;
@@ -521,7 +528,7 @@
     }
     #toolbar button:active { background: #555; border-color: #888; }
 
-    .arrow-group {
+    .arrow-group-unused {
       display: grid;
       grid-template-columns: 34px 34px 34px;
       grid-template-rows: 30px 30px;
@@ -628,24 +635,16 @@
   <div id="toolbar">
     <button id="btn-tab">Tab</button>
     <button id="btn-enter">Enter</button>
-    <button id="btn-ls">ls</button>
-    <button id="btn-cd">cd</button>
-    <button id="btn-clear">clear</button>
     <button id="btn-bksp">⌫</button>
     <button id="btn-ctrlc">^C</button>
     <button id="btn-1">1</button>
-    <button id="btn-2">2</button>
-    <button id="btn-3">3</button>
     <button id="btn-claude"><small style="font-size:10px;opacity:0.7">claude</small></button>
     <button id="btn-continue">cont<br><small style="font-size:10px;opacity:0.7">inue</small></button>
     <button id="btn-next">do next<br><small style="font-size:10px;opacity:0.7">item</small></button>
     <button id="btn-folder" title="Switch folder">📂<br><small style="font-size:10px;opacity:0.7">folder</small></button>
-    <div class="arrow-group">
-      <button class="arrow-up"    id="btn-up">▲</button>
-      <button class="arrow-left"  id="btn-left">◀</button>
-      <button class="arrow-down"  id="btn-down">▼</button>
-      <button class="arrow-right" id="btn-right">▶</button>
-    </div>
+    <button id="btn-up">▲</button>
+    <button id="btn-down">▼</button>
+    <span id="toolbar-branch" style="font-size:13px;color:#0e8;background:#0a2e1a;padding:2px 9px;border-radius:8px;border:1px solid #0a6;white-space:nowrap;display:none;align-self:center;flex-shrink:0;"></span>
   </div>
 
   <script>
@@ -659,6 +658,58 @@
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
+
+    // ── Session switch: Option/Alt + ← / → ──────────────────────────────────────
+    function switchSessionByOffset(offset) {
+      const currentDir = dirFromPath();
+      const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
+      if (visible.length < 2) return;
+      const idx = visible.findIndex(s => s.id === currentSessionId);
+      const next = visible[(idx + offset + visible.length) % visible.length];
+      if (next) attachSession(next.id);
+    }
+
+    // Intercept inside xterm.js (terminal has focus)
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.altKey && e.type === 'keydown') {
+        if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1); return false; }
+        if (e.key === 'ArrowRight') { switchSessionByOffset(+1); return false; }
+      }
+      return true;
+    });
+
+    // Intercept outside terminal (editor / rest of page has focus)
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); switchSessionByOffset(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); switchSessionByOffset(+1); }
+      }
+    });
+
+    // ── Session switch: Option/Alt + ← / → ──────────────────────────────────────
+    function switchSessionByOffset(offset) {
+      const currentDir = dirFromPath();
+      const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
+      if (visible.length < 2) return;
+      const idx = visible.findIndex(s => s.id === currentSessionId);
+      const next = visible[(idx + offset + visible.length) % visible.length];
+      if (next) attachSession(next.id);
+    }
+
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.altKey && e.type === 'keydown') {
+        if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1); return false; }
+        if (e.key === 'ArrowRight') { switchSessionByOffset(+1); return false; }
+      }
+      return true;
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); switchSessionByOffset(-1); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); switchSessionByOffset(+1); }
+      }
+    });
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let ws;
@@ -829,6 +880,8 @@
       const { base } = await fetch('/api/dirs').then(r => r.json());
       const cleanName = session.name.replace(/^[^\w]+/, '').trim() || session.name;
       const notesPath = base + '/' + session.dir + '/sessions/' + cleanName + '.md';
+      const relNotesPath = 'sessions/' + cleanName + '.md';
+
       // Create file with template if it doesn't exist
       const check = await fetch('/api/file?path=' + encodeURIComponent(notesPath)).then(r => r.json());
       if (check.error) {
@@ -851,7 +904,18 @@
           body: JSON.stringify({ path: notesPath, content: template })
         });
       }
+
       openFile(notesPath, null);
+
+      // If claude session, attach it and ask Claude to summarise into the notes file
+      if (session.type === 'claude') {
+        if (session.id !== currentSessionId) {
+          attachSession(session.id);
+          await new Promise(r => setTimeout(r, 400));
+        }
+        const prompt = `Please update ${relNotesPath} with a summary of our work so far. Include: 1) Key Points — major decisions and findings, 2) Related Files — important .md files referenced, 3) Tickets / Confluence — any Jira tickets or Confluence links mentioned. Keep each section concise.\r`;
+        send(prompt);
+      }
     }
 
     function attachSession(id) {
@@ -927,6 +991,20 @@
             setTimeout(() => restoreOpenFiles(msg.openFilesList, msg.openFilesActive || 0), 300);
           } else if (msg.lastOpenFile) {
             setTimeout(() => openFile(msg.lastOpenFile, null), 300);
+          }
+          // Auto-load session notes if it exists (no auto-create)
+          if (msg.dir && msg.name) {
+            const cleanName = msg.name.replace(/^[^\w]+/, '').trim() || msg.name;
+            fetch('/api/dirs').then(r => r.json()).then(({ base }) => {
+              const notesPath = base + '/' + msg.dir + '/sessions/' + cleanName + '.md';
+              fetch('/api/file?path=' + encodeURIComponent(notesPath))
+                .then(r => r.json())
+                .then(({ error }) => {
+                  if (!error && !openFiles.find(f => f.path === notesPath)) {
+                    setTimeout(() => openFile(notesPath, null), 350);
+                  }
+                });
+            });
           }
           // Force terminal refresh
           setTimeout(() => {
@@ -1088,14 +1166,9 @@
     // Toolbar
     document.getElementById('btn-tab').addEventListener('click',    () => send('\t'));
     document.getElementById('btn-enter').addEventListener('click',  () => send('\r'));
-    document.getElementById('btn-ls').addEventListener('click',     () => send('ls\r'));
-    document.getElementById('btn-cd').addEventListener('click',     () => send('cd '));
-    document.getElementById('btn-clear').addEventListener('click',  () => send('clear\r'));
     document.getElementById('btn-bksp').addEventListener('click',   () => send('\x7f'));
     document.getElementById('btn-ctrlc').addEventListener('click',  () => send('\x03'));
-    document.getElementById('btn-1').addEventListener('click',      () => send('1'));
-    document.getElementById('btn-2').addEventListener('click',      () => send('2'));
-    document.getElementById('btn-3').addEventListener('click',      () => send('3'));
+    document.getElementById('btn-1').addEventListener('click', () => send('1'));
     document.getElementById('btn-claude').addEventListener('click', () => {
       send(claudeCmd + '\r');
       renameSession('Claude');
@@ -1106,10 +1179,8 @@
     document.getElementById('btn-continue').addEventListener('click', () => send('continue\r'));
     document.getElementById('btn-next').addEventListener('click',     () => send('do next item\r'));
     document.getElementById('btn-folder').addEventListener('click',   () => openDirPicker());
-    document.getElementById('btn-up').addEventListener('click',     () => send('\x1b[A'));
-    document.getElementById('btn-down').addEventListener('click',   () => send('\x1b[B'));
-    document.getElementById('btn-right').addEventListener('click',  () => send('\x1b[C'));
-    document.getElementById('btn-left').addEventListener('click',   () => send('\x1b[D'));
+    document.getElementById('btn-up').addEventListener('click',   () => send('\x1b[A'));
+    document.getElementById('btn-down').addEventListener('click', () => send('\x1b[B'));
 
     function fitAndScroll() { fitAddon.fit(); term.scrollToBottom(); }
     window.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
@@ -1125,11 +1196,15 @@
     function fbLoad(dir) {
       Promise.all([
         fetch('/api/files?path=' + encodeURIComponent(dir)).then(r => r.json()),
-        fetch('/api/git-status?path=' + encodeURIComponent(dir)).then(r => r.json()).catch(() => ({ files: {} }))
-      ]).then(([{ path: p, items }, { files: gitFiles }]) => {
+        fetch('/api/git-status?path=' + encodeURIComponent(dir)).then(r => r.json()).catch(() => ({ files: {} })),
+        fetch('/api/git-branch?path=' + encodeURIComponent(dir)).then(r => r.json()).catch(() => ({ branch: '' }))
+      ]).then(([{ path: p, items }, { files: gitFiles }, { branch }]) => {
           fbCurrentPath = p;
           document.getElementById('fb-path').textContent =
             p.replace(location.origin, '').replace(/^.*\/git\//, '~/git/');
+          const branchEl = document.getElementById('toolbar-branch');
+          if (branch) { branchEl.textContent = '⎇ ' + branch; branchEl.style.display = ''; }
+          else { branchEl.style.display = 'none'; }
           const list = document.getElementById('fb-list');
           list.innerHTML = '';
           items.forEach(item => {
@@ -1343,14 +1418,14 @@
             continue;
           }
           const r = await fetch('/api/file?path=' + encodeURIComponent(filePath));
-          const { content, error } = await r.json();
+          const { content, error, mtime } = await r.json();
           if (error) continue;
           let defaultMode;
           if (isNotebook(fileName)) defaultMode = 'notebook';
           else if (isCsv(fileName)) defaultMode = 'csv';
           else if (isMarkdown(fileName) || isHtml(fileName)) defaultMode = 'preview';
           else defaultMode = 'code';
-          openFiles.push({ path: filePath, fileName, content, dirty: false, mode: defaultMode });
+          openFiles.push({ path: filePath, fileName, content, dirty: false, mode: defaultMode, mtime: mtime || 0 });
         } catch (e) { /* skip missing files */ }
       }
       if (openFiles.length > 0) {
@@ -1497,14 +1572,14 @@
       }
       fetch('/api/file?path=' + encodeURIComponent(filePath))
         .then(r => r.json())
-        .then(({ content, error }) => {
+        .then(({ content, error, mtime }) => {
           if (error) { alert('Cannot open: ' + error); return; }
           let defaultMode;
           if (isNotebook(fileName)) defaultMode = 'notebook';
           else if (isCsv(fileName)) defaultMode = 'csv';
           else if (isMarkdown(fileName) || isHtml(fileName)) defaultMode = 'preview';
           else defaultMode = 'code';
-          const tab = { path: filePath, fileName, content, dirty: false, mode: defaultMode };
+          const tab = { path: filePath, fileName, content, dirty: false, mode: defaultMode, mtime: mtime || 0 };
           openFiles.push(tab);
           currentFileIdx = openFiles.length - 1;
           renderFileTabs();
@@ -1516,6 +1591,26 @@
         })
         .catch(() => alert('Failed to load file'));
     }
+
+    // ── File watch: poll mtime and auto-reload changed non-dirty files ──────────
+    setInterval(async () => {
+      for (let i = 0; i < openFiles.length; i++) {
+        const tab = openFiles[i];
+        if (tab.dirty || !tab.mtime) continue;
+        try {
+          const { mtime } = await fetch('/api/file-stat?path=' + encodeURIComponent(tab.path)).then(r => r.json());
+          if (mtime && mtime > tab.mtime) {
+            const { content, mtime: newMtime } = await fetch('/api/file?path=' + encodeURIComponent(tab.path)).then(r => r.json());
+            tab.content = content;
+            tab.mtime = newMtime || mtime;
+            if (i === currentFileIdx) {
+              document.getElementById('editor-textarea').value = content;
+              showTabContent(i);
+            }
+          }
+        } catch { /* ignore network errors */ }
+      }
+    }, 3000);
 
     function markSaved(saved) {
       const btn = document.getElementById('editor-save');
