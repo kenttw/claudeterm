@@ -278,32 +278,22 @@
     .term-pane.pane-focused {
       border-top: 2px solid #0e8;
     }
-    .pane-session-bar {
+    .pane-header {
       display: flex;
       align-items: center;
       background: #252526;
       border-bottom: 1px solid #333;
-      overflow-x: auto;
-      scrollbar-width: none;
       flex-shrink: 0;
-      min-height: 28px;
+      height: 24px;
       font-size: 12px;
       font-family: Menlo, Monaco, monospace;
-      gap: 2px;
-      padding: 0 4px;
-    }
-    .pane-session-bar::-webkit-scrollbar { display: none; }
-    .pane-tab {
-      padding: 4px 10px;
+      padding: 0 8px;
       color: #888;
-      cursor: pointer;
-      white-space: nowrap;
-      border-radius: 4px;
+      gap: 6px;
       user-select: none;
     }
-    .pane-tab:hover { color: #ccc; background: #2a2d2e; }
-    .pane-tab.active { color: #fff; background: #1e1e1e; border-bottom: 2px solid #0e8; }
-    .pane-tab.claude-type { border-bottom-color: #f90; }
+    .pane-header-name { color: #ccc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pane-header-hint { font-size: 10px; color: #555; }
     .pane-no-session {
       flex: 1;
       display: flex;
@@ -650,6 +640,7 @@
     <div id="session-tabs"></div>
     <div id="btn-new-session" title="New session">＋</div>
     <div id="btn-split" title="Split view">⊟</div>
+    <div id="split-target-hint" style="display:none;font-size:11px;color:#0e8;font-family:Menlo,Monaco,monospace;padding:0 6px;align-self:center;"></div>
   </div>
 
   <!-- Main area: file list | drag | editor/preview | drag | terminal -->
@@ -698,14 +689,20 @@
       <div id="rate-limit-banner"><span id="rate-limit-msg"></span></div>
       <!-- Pane 0 (always visible) -->
       <div class="term-pane pane-focused" id="pane-0">
-        <div class="pane-session-bar" id="pane-0-tabs" style="display:none"></div>
+        <div class="pane-header" id="pane-0-header" style="display:none">
+          <span class="pane-header-hint">◀ L</span>
+          <span class="pane-header-name" id="pane-0-header-name">—</span>
+        </div>
         <div class="pane-no-session" id="pane-0-nosession">No session — tap ＋ to start</div>
         <div class="pane-term-wrap" id="pane-0-term" style="display:none"></div>
       </div>
       <!-- Pane 1 (only in split mode) -->
       <div class="term-pane" id="pane-1" style="display:none">
-        <div class="pane-session-bar" id="pane-1-tabs"></div>
-        <div class="pane-no-session" id="pane-1-nosession">Click a session tab above</div>
+        <div class="pane-header" id="pane-1-header">
+          <span class="pane-header-hint">▶ R</span>
+          <span class="pane-header-name" id="pane-1-header-name">— click a tab above to attach —</span>
+        </div>
+        <div class="pane-no-session" id="pane-1-nosession" style="display:none"></div>
         <div class="pane-term-wrap" id="pane-1-term" style="display:none"></div>
       </div>
     </div>
@@ -789,6 +786,10 @@
       panes.forEach((p, i) => {
         document.getElementById('pane-' + i).classList.toggle('pane-focused', i === idx);
       });
+      if (splitMode) {
+        const hint = document.getElementById('split-target-hint');
+        hint.textContent = '→ ' + (idx === 0 ? 'L' : 'R');
+      }
     }
 
     function panesSend(idx, data) {
@@ -1000,27 +1001,15 @@
       });
     }
 
-    // ── Pane tab bars (mini session selectors inside each pane in split mode) ───
-    function renderPaneTabs() {
+    // ── Pane headers: show current session name per pane in split mode ──────────
+    function renderPaneHeaders() {
       if (!splitMode) return;
-      const currentDir = dirFromPath();
-      const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
       [0, 1].forEach(paneIdx => {
-        const bar = document.getElementById('pane-' + paneIdx + '-tabs');
-        if (!bar) return;
-        bar.innerHTML = '';
+        const nameEl = document.getElementById('pane-' + paneIdx + '-header-name');
+        if (!nameEl) return;
         const pane = panes[paneIdx];
-        visible.forEach(s => {
-          const tab = document.createElement('div');
-          const isActive = pane && pane.sessionId === s.id;
-          tab.className = 'pane-tab' + (isActive ? ' active' : '') + (s.type === 'claude' ? ' claude-type' : '');
-          tab.textContent = s.name + (s.type === 'claude' ? ' ⚡' : '');
-          tab.addEventListener('click', () => {
-            setActivePane(paneIdx);
-            attachSessionToPane(paneIdx, s.id);
-          });
-          bar.appendChild(tab);
-        });
+        const session = pane && pane.sessionId ? allSessions.find(s => s.id === pane.sessionId) : null;
+        nameEl.textContent = session ? session.name + (session.type === 'claude' ? ' ⚡' : '') : '— click a tab above to attach —';
       });
     }
 
@@ -1093,10 +1082,12 @@
       splitMode = true;
       document.getElementById('terminal-column').classList.add('split-mode');
       document.getElementById('btn-split').classList.add('active');
-      // Show pane-0 session bar
-      document.getElementById('pane-0-tabs').style.display = '';
-      // Show pane-1
+      // Show pane-0 header and pane-1
+      document.getElementById('pane-0-header').style.display = '';
       document.getElementById('pane-1').style.display = '';
+      const hint = document.getElementById('split-target-hint');
+      hint.style.display = '';
+      hint.textContent = '→ L';
 
       // Recreate pane-0 xterm so it gets a canvas sized for the split width
       recreatePane0Term();
@@ -1108,22 +1099,23 @@
           .then(r => r.json())
           .then(({ token }) => {
             openPaneWs(1, token, () => {
-              renderPaneTabs();
+              renderPaneHeaders();
               setTimeout(() => {
                 if (panes[1]) { panes[1].fitAddon.fit(); panes[1].term.scrollToBottom(); }
               }, 150);
             });
           });
       }
-      renderPaneTabs();
+      renderPaneHeaders();
     }
 
     function exitSplitMode() {
       splitMode = false;
       document.getElementById('terminal-column').classList.remove('split-mode');
       document.getElementById('btn-split').classList.remove('active');
-      document.getElementById('pane-0-tabs').style.display = 'none';
+      document.getElementById('pane-0-header').style.display = 'none';
       document.getElementById('pane-1').style.display = 'none';
+      document.getElementById('split-target-hint').style.display = 'none';
       // Close pane 1 WS
       if (panes[1] && panes[1].ws) {
         panes[1].ws.close();
@@ -1181,9 +1173,9 @@
       }
     }
 
-    // attachSession = attach active pane (pane 0) — preserves existing callers
+    // attachSession — in split mode routes to the focused pane, otherwise pane 0
     function attachSession(id) {
-      attachSessionToPane(0, id);
+      attachSessionToPane(splitMode ? activePaneIdx : 0, id);
     }
 
     function attachSessionToPane(paneIdx, id) {
@@ -1213,7 +1205,7 @@
           if (msg.id !== attachedId) {
             sessionNeedsInput.add(msg.id);
             renderTabs();
-            renderPaneTabs();
+            renderPaneHeaders();
           }
         }
 
@@ -1223,7 +1215,7 @@
             const firstLoad = allSessions.length === 0;
             allSessions = msg.sessions;
             renderTabs();
-            renderPaneTabs();
+            renderPaneHeaders();
             const current = allSessions.find(s => s.id === panes[0].sessionId);
             if (panes[0].sessionId && !current) {
               panes[0].sessionId = null;
@@ -1240,7 +1232,7 @@
           } else {
             // pane 1: just refresh its session list view
             allSessions = msg.sessions;
-            renderPaneTabs();
+            renderPaneHeaders();
           }
         }
 
@@ -1254,7 +1246,7 @@
           if (paneIdx === 0) hideRateLimit();
           showTerminal(true, paneIdx);
           renderTabs();
-          renderPaneTabs();
+          renderPaneHeaders();
 
           // Only pane 0 updates URL, file browser, open files
           if (paneIdx === 0) {
