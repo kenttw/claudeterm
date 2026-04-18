@@ -398,14 +398,24 @@
       line-height: 1;
     }
     .session-tab .input-hint {
-      font-size: 11px;
-      color: #ff0;
-      animation: hint-pulse 1s ease-in-out infinite alternate;
+      font-size: 14px;
+      color: #ffe000;
+      animation: hint-pulse 0.7s ease-in-out infinite alternate;
       line-height: 1;
+      display: inline-block;
+      filter: drop-shadow(0 0 4px #ffe000);
     }
     @keyframes hint-pulse {
-      from { opacity: 0.5; }
-      to   { opacity: 1; }
+      from {
+        opacity: 0.3;
+        transform: scale(0.85);
+        filter: drop-shadow(0 0 2px #ff0);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1.35);
+        filter: drop-shadow(0 0 8px #ffe000) drop-shadow(0 0 16px #ffa500);
+      }
     }
 
     #btn-new-session {
