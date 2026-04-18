@@ -291,6 +291,7 @@
       color: #888;
       gap: 6px;
       user-select: none;
+      cursor: pointer;
     }
     .pane-header-name { color: #ccc; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pane-header-hint { font-size: 10px; color: #555; }
@@ -753,6 +754,9 @@
       });
 
       termWrap.addEventListener('mousedown', () => setActivePane(idx));
+      // Also allow focusing by clicking the pane container (e.g. header area when no session yet)
+      const paneEl = document.getElementById('pane-' + idx);
+      if (paneEl) paneEl.addEventListener('mousedown', () => setActivePane(idx));
 
       const pane = { idx, term, fitAddon, ws: null, sessionId: null, inputBuffer: '' };
       panes[idx] = pane;
@@ -1049,6 +1053,7 @@
         return true;
       });
       termWrap.addEventListener('mousedown', () => setActivePane(0));
+      document.getElementById('pane-0').addEventListener('mousedown', () => setActivePane(0));
       term.onData((data) => {
         if (isTerminalResponse(data)) return;
         panesSend(0, data);
