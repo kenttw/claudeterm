@@ -260,6 +260,76 @@
     }
     #terminal { flex: 1; min-height: 0; width: 100%; }
 
+    /* Split mode: two panes side by side */
+    #terminal-column.split-mode {
+      flex-direction: row;
+    }
+    .term-pane {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    .term-pane + .term-pane {
+      border-left: 2px solid #333;
+    }
+    .term-pane.pane-focused {
+      border-top: 2px solid #0e8;
+    }
+    .pane-session-bar {
+      display: flex;
+      align-items: center;
+      background: #252526;
+      border-bottom: 1px solid #333;
+      overflow-x: auto;
+      scrollbar-width: none;
+      flex-shrink: 0;
+      min-height: 28px;
+      font-size: 12px;
+      font-family: Menlo, Monaco, monospace;
+      gap: 2px;
+      padding: 0 4px;
+    }
+    .pane-session-bar::-webkit-scrollbar { display: none; }
+    .pane-tab {
+      padding: 4px 10px;
+      color: #888;
+      cursor: pointer;
+      white-space: nowrap;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .pane-tab:hover { color: #ccc; background: #2a2d2e; }
+    .pane-tab.active { color: #fff; background: #1e1e1e; border-bottom: 2px solid #0e8; }
+    .pane-tab.claude-type { border-bottom-color: #f90; }
+    .pane-no-session {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #555;
+      font-family: Menlo, Monaco, monospace;
+      font-size: 13px;
+    }
+    .pane-term-wrap {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+    }
+    #btn-split {
+      padding: 6px 10px;
+      color: #888;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+      font-family: Menlo, Monaco, monospace;
+    }
+    #btn-split:hover { color: #fff; }
+    #btn-split.active { color: #0e8; }
+
     /* Show file browser + editor on desktop */
     @media (min-width: 900px) {
       #file-browser { display: flex; }
@@ -579,6 +649,7 @@
   <div id="session-bar">
     <div id="session-tabs"></div>
     <div id="btn-new-session" title="New session">＋</div>
+    <div id="btn-split" title="Split view">⊟</div>
   </div>
 
   <!-- Main area: file list | drag | editor/preview | drag | terminal -->
@@ -625,8 +696,18 @@
     <div id="terminal-column">
       <!-- Rate limit notification banner -->
       <div id="rate-limit-banner"><span id="rate-limit-msg"></span></div>
-      <div id="no-session">No session — tap ＋ to start</div>
-      <div id="terminal" style="display:none"></div>
+      <!-- Pane 0 (always visible) -->
+      <div class="term-pane pane-focused" id="pane-0">
+        <div class="pane-session-bar" id="pane-0-tabs" style="display:none"></div>
+        <div class="pane-no-session" id="pane-0-nosession">No session — tap ＋ to start</div>
+        <div class="pane-term-wrap" id="pane-0-term" style="display:none"></div>
+      </div>
+      <!-- Pane 1 (only in split mode) -->
+      <div class="term-pane" id="pane-1" style="display:none">
+        <div class="pane-session-bar" id="pane-1-tabs"></div>
+        <div class="pane-no-session" id="pane-1-nosession">Click a session tab above</div>
+        <div class="pane-term-wrap" id="pane-1-term" style="display:none"></div>
+      </div>
     </div>
 
   </div>
@@ -648,85 +729,129 @@
   </div>
 
   <script>
-    const term = new Terminal({
-      cursorBlink: true,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      fontSize: 14,
-      scrollback: 50000,
-      theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#ffffff' },
-    });
-    const fitAddon = new FitAddon.FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(document.getElementById('terminal'));
+    // ── Pane management ──────────────────────────────────────────────────────────
+    const panes = [];
+    let activePaneIdx = 0;
+    let splitMode = false;
 
-    // ── Session switch: Option/Alt + ← / → ──────────────────────────────────────
-    function switchSessionByOffset(offset) {
+    function createPane(idx) {
+      const termWrap = document.getElementById('pane-' + idx + '-term');
+      const term = new Terminal({
+        cursorBlink: true,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 14,
+        scrollback: 50000,
+        theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#ffffff' },
+      });
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(termWrap);
+
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.altKey && e.type === 'keydown') {
+          if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1, idx); return false; }
+          if (e.key === 'ArrowRight') { switchSessionByOffset(+1, idx); return false; }
+        }
+        return true;
+      });
+
+      termWrap.addEventListener('mousedown', () => setActivePane(idx));
+
+      const pane = { idx, term, fitAddon, ws: null, sessionId: null, inputBuffer: '' };
+      panes[idx] = pane;
+
+      term.onData((data) => {
+        if (isTerminalResponse(data)) return;
+        panesSend(idx, data);
+        if (data === '\r') {
+          const line = pane.inputBuffer.trim();
+          const escapedCmd = claudeCmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (new RegExp('^' + escapedCmd + '\\s*$').test(line)) paneRenameSession(idx, 'Claude');
+          pane.inputBuffer = '';
+        } else if (data === '\x7f') {
+          pane.inputBuffer = pane.inputBuffer.slice(0, -1);
+        } else if (data.length === 1 && data >= ' ') {
+          pane.inputBuffer += data;
+        }
+      });
+      term.onTitleChange((title) => {
+        if (pane.sessionId && title) paneRenameSession(idx, title);
+      });
+      term.onResize(({ cols, rows }) => {
+        if (pane.ws && pane.ws.readyState === WebSocket.OPEN)
+          pane.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      });
+      return pane;
+    }
+
+    function setActivePane(idx) {
+      activePaneIdx = idx;
+      panes.forEach((p, i) => {
+        document.getElementById('pane-' + i).classList.toggle('pane-focused', i === idx);
+      });
+    }
+
+    function panesSend(idx, data) {
+      const pane = panes[idx];
+      if (pane && pane.ws && pane.ws.readyState === WebSocket.OPEN)
+        pane.ws.send(JSON.stringify({ type: 'input', data }));
+    }
+
+    function send(data) { panesSend(activePaneIdx, data); }
+
+    function paneRenameSession(idx, name) {
+      const pane = panes[idx];
+      if (pane && pane.sessionId && pane.ws && pane.ws.readyState === WebSocket.OPEN)
+        pane.ws.send(JSON.stringify({ type: 'session.rename', id: pane.sessionId, name }));
+    }
+
+    function switchSessionByOffset(offset, paneIdx) {
       const currentDir = dirFromPath();
       const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
       if (visible.length < 2) return;
-      const idx = visible.findIndex(s => s.id === currentSessionId);
+      const pane = panes[paneIdx];
+      const idx = visible.findIndex(s => s.id === pane.sessionId);
       const next = visible[(idx + offset + visible.length) % visible.length];
-      if (next) attachSession(next.id);
+      if (next) attachSessionToPane(paneIdx, next.id);
     }
-
-    // Intercept inside xterm.js (terminal has focus)
-    term.attachCustomKeyEventHandler((e) => {
-      if (e.altKey && e.type === 'keydown') {
-        if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1); return false; }
-        if (e.key === 'ArrowRight') { switchSessionByOffset(+1); return false; }
-      }
-      return true;
-    });
-
-    // Intercept outside terminal (editor / rest of page has focus)
-    document.addEventListener('keydown', (e) => {
-      if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        if (e.key === 'ArrowLeft')  { e.preventDefault(); switchSessionByOffset(-1); }
-        if (e.key === 'ArrowRight') { e.preventDefault(); switchSessionByOffset(+1); }
-      }
-    });
-
-    // ── Session switch: Option/Alt + ← / → ──────────────────────────────────────
-    function switchSessionByOffset(offset) {
-      const currentDir = dirFromPath();
-      const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
-      if (visible.length < 2) return;
-      const idx = visible.findIndex(s => s.id === currentSessionId);
-      const next = visible[(idx + offset + visible.length) % visible.length];
-      if (next) attachSession(next.id);
-    }
-
-    term.attachCustomKeyEventHandler((e) => {
-      if (e.altKey && e.type === 'keydown') {
-        if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1); return false; }
-        if (e.key === 'ArrowRight') { switchSessionByOffset(+1); return false; }
-      }
-      return true;
-    });
 
     document.addEventListener('keydown', (e) => {
       if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        if (e.key === 'ArrowLeft')  { e.preventDefault(); switchSessionByOffset(-1); }
-        if (e.key === 'ArrowRight') { e.preventDefault(); switchSessionByOffset(+1); }
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); switchSessionByOffset(-1, activePaneIdx); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); switchSessionByOffset(+1, activePaneIdx); }
       }
     });
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let ws;
+    let wsToken = null;
+
+    // Compatibility shims so existing code using currentSessionId / ws still works
+    Object.defineProperty(window, 'currentSessionId', {
+      get: () => panes[0] ? panes[0].sessionId : null,
+      set: (v) => { if (panes[0]) panes[0].sessionId = v; },
+    });
+    Object.defineProperty(window, 'ws', {
+      get: () => {
+        const p = panes[activePaneIdx] || panes[0];
+        return p ? p.ws : null;
+      },
+    });
+
+    let allSessions = [];
+    let rateLimitTimerId = null;
+    const sessionNeedsInput = new Set();
+
+    // ── Boot: create pane 0, open its WS ────────────────────────────────────────
+    createPane(0);
     fetch('/api/token')
       .then(r => r.json())
       .then(({ token }) => {
-        ws = new WebSocket(`${protocol}//${location.host}?token=${token}`);
-        initWs();
+        wsToken = token;
+        openPaneWs(0, token);
       })
       .catch(() => {
-        document.getElementById('no-session').textContent = 'Auth failed — please reload.';
+        document.getElementById('pane-0-nosession').textContent = 'Auth failed — please reload.';
       });
-
-    let currentSessionId = null;
-    let allSessions = [];
-    let rateLimitTimerId = null;
-    const sessionNeedsInput = new Set(); // session ids waiting for user input
 
     function showRateLimit(retryAfter) {
       clearTimeout(rateLimitTimerId);
@@ -765,15 +890,14 @@
       })
       .catch(() => {});
 
-    function send(data) {
-      if (ws.readyState === WebSocket.OPEN)
-        ws.send(JSON.stringify({ type: 'input', data }));
-    }
-
-    function showTerminal(show) {
-      document.getElementById('terminal').style.display = show ? '' : 'none';
-      document.getElementById('no-session').style.display = show ? 'none' : '';
-      if (show) setTimeout(() => { fitAddon.fit(); term.scrollToBottom(); }, 50);
+    function showTerminal(show, paneIdx) {
+      const idx = paneIdx !== undefined ? paneIdx : 0;
+      document.getElementById('pane-' + idx + '-term').style.display = show ? '' : 'none';
+      document.getElementById('pane-' + idx + '-nosession').style.display = show ? 'none' : '';
+      if (show) {
+        const pane = panes[idx];
+        if (pane) setTimeout(() => { pane.fitAddon.fit(); pane.term.scrollToBottom(); }, 50);
+      }
     }
 
     // ── URL routing ────────────────────────────────────────────────────────────
@@ -876,6 +1000,145 @@
       });
     }
 
+    // ── Pane tab bars (mini session selectors inside each pane in split mode) ───
+    function renderPaneTabs() {
+      if (!splitMode) return;
+      const currentDir = dirFromPath();
+      const visible = currentDir ? allSessions.filter(s => s.dir === currentDir) : allSessions;
+      [0, 1].forEach(paneIdx => {
+        const bar = document.getElementById('pane-' + paneIdx + '-tabs');
+        if (!bar) return;
+        bar.innerHTML = '';
+        const pane = panes[paneIdx];
+        visible.forEach(s => {
+          const tab = document.createElement('div');
+          const isActive = pane && pane.sessionId === s.id;
+          tab.className = 'pane-tab' + (isActive ? ' active' : '') + (s.type === 'claude' ? ' claude-type' : '');
+          tab.textContent = s.name + (s.type === 'claude' ? ' ⚡' : '');
+          tab.addEventListener('click', () => {
+            setActivePane(paneIdx);
+            attachSessionToPane(paneIdx, s.id);
+          });
+          bar.appendChild(tab);
+        });
+      });
+    }
+
+    // ── Split mode toggle ────────────────────────────────────────────────────────
+    function recreatePane0Term() {
+      // Destroy the existing xterm instance and recreate it fresh in the
+      // (now-split) container. Re-attach to same session so server replays output.
+      const p0 = panes[0];
+      if (!p0) return;
+      const savedSessionId = p0.sessionId;
+      const termWrap = document.getElementById('pane-0-term');
+
+      // Dispose old xterm
+      try { p0.term.dispose(); } catch (e) {}
+      // Clear any canvases left behind
+      termWrap.innerHTML = '';
+
+      // Create fresh Terminal in same wrap (now correctly sized for split)
+      const term = new Terminal({
+        cursorBlink: true,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 14,
+        scrollback: 50000,
+        theme: { background: '#1e1e1e', foreground: '#d4d4d4', cursor: '#ffffff' },
+      });
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(termWrap);
+      fitAddon.fit();
+
+      // Re-wire event handlers
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.altKey && e.type === 'keydown') {
+          if (e.key === 'ArrowLeft')  { switchSessionByOffset(-1, 0); return false; }
+          if (e.key === 'ArrowRight') { switchSessionByOffset(+1, 0); return false; }
+        }
+        return true;
+      });
+      termWrap.addEventListener('mousedown', () => setActivePane(0));
+      term.onData((data) => {
+        if (isTerminalResponse(data)) return;
+        panesSend(0, data);
+        if (data === '\r') {
+          const line = p0.inputBuffer.trim();
+          const escapedCmd = claudeCmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          if (new RegExp('^' + escapedCmd + '\\s*$').test(line)) paneRenameSession(0, 'Claude');
+          p0.inputBuffer = '';
+        } else if (data === '\x7f') {
+          p0.inputBuffer = p0.inputBuffer.slice(0, -1);
+        } else if (data.length === 1 && data >= ' ') {
+          p0.inputBuffer += data;
+        }
+      });
+      term.onTitleChange((title) => { if (p0.sessionId && title) paneRenameSession(0, title); });
+      term.onResize(({ cols, rows }) => {
+        if (p0.ws && p0.ws.readyState === WebSocket.OPEN)
+          p0.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      });
+
+      p0.term = term;
+      p0.fitAddon = fitAddon;
+
+      // Re-attach to session — server replays output into fresh terminal
+      if (savedSessionId && p0.ws && p0.ws.readyState === WebSocket.OPEN) {
+        p0.ws.send(JSON.stringify({ type: 'session.attach', id: savedSessionId }));
+      }
+    }
+
+    function enterSplitMode() {
+      splitMode = true;
+      document.getElementById('terminal-column').classList.add('split-mode');
+      document.getElementById('btn-split').classList.add('active');
+      // Show pane-0 session bar
+      document.getElementById('pane-0-tabs').style.display = '';
+      // Show pane-1
+      document.getElementById('pane-1').style.display = '';
+
+      // Recreate pane-0 xterm so it gets a canvas sized for the split width
+      recreatePane0Term();
+
+      // Create pane 1 if needed
+      if (!panes[1]) {
+        createPane(1);
+        fetch('/api/token')
+          .then(r => r.json())
+          .then(({ token }) => {
+            openPaneWs(1, token, () => {
+              renderPaneTabs();
+              setTimeout(() => {
+                if (panes[1]) { panes[1].fitAddon.fit(); panes[1].term.scrollToBottom(); }
+              }, 150);
+            });
+          });
+      }
+      renderPaneTabs();
+    }
+
+    function exitSplitMode() {
+      splitMode = false;
+      document.getElementById('terminal-column').classList.remove('split-mode');
+      document.getElementById('btn-split').classList.remove('active');
+      document.getElementById('pane-0-tabs').style.display = 'none';
+      document.getElementById('pane-1').style.display = 'none';
+      // Close pane 1 WS
+      if (panes[1] && panes[1].ws) {
+        panes[1].ws.close();
+        panes[1].ws = null;
+        panes[1].sessionId = null;
+      }
+      setActivePane(0);
+      // Recreate pane-0 xterm so it gets a canvas sized for full width
+      recreatePane0Term();
+    }
+
+    document.getElementById('btn-split').addEventListener('click', () => {
+      splitMode ? exitSplitMode() : enterSplitMode();
+    });
+
     async function openSessionNotes(session) {
       const { base } = await fetch('/api/dirs').then(r => r.json());
       const cleanName = session.name.replace(/^[^\w]+/, '').trim() || session.name;
@@ -918,46 +1181,66 @@
       }
     }
 
+    // attachSession = attach active pane (pane 0) — preserves existing callers
     function attachSession(id) {
-      term.clear();
-      ws.send(JSON.stringify({ type: 'session.attach', id }));
-      // URL is updated when server responds with session.attached
+      attachSessionToPane(0, id);
     }
 
-    function initWs() {
-      ws.onmessage = (e) => {
+    function attachSessionToPane(paneIdx, id) {
+      const pane = panes[paneIdx];
+      if (!pane) return;
+      pane.term.clear();
+      pane.ws.send(JSON.stringify({ type: 'session.attach', id }));
+    }
+
+    // Open a new WebSocket for a pane and wire up its message handler
+    function openPaneWs(paneIdx, token, onReady) {
+      const pane = panes[paneIdx];
+      const newWs = new WebSocket(`${protocol}//${location.host}?token=${token}`);
+      pane.ws = newWs;
+
+      newWs.onopen = () => { if (onReady) onReady(); };
+
+      newWs.onmessage = (e) => {
         const msg = JSON.parse(e.data);
 
         if (msg.type === 'output') {
-          term.write(msg.data, () => term.scrollToBottom());
+          pane.term.write(msg.data, () => pane.term.scrollToBottom());
         }
 
         if (msg.type === 'session.hint') {
-          if (msg.id !== currentSessionId) {
+          const attachedId = panes[paneIdx].sessionId;
+          if (msg.id !== attachedId) {
             sessionNeedsInput.add(msg.id);
             renderTabs();
+            renderPaneTabs();
           }
         }
 
         if (msg.type === 'session.list') {
-          const firstLoad = allSessions.length === 0;
-          allSessions = msg.sessions;
-          renderTabs();
-          const current = allSessions.find(s => s.id === currentSessionId);
-          if (currentSessionId && !current) {
-            currentSessionId = null;
-            showTerminal(false);
-            setUrl(dirFromPath());
-          } else if (current) {
-            setUrl(current.dir, current.name); // keep URL in sync after renames
-          }
-          if (firstLoad) {
-            const dir = dirFromPath();
-            if (dir) {
-              autoAttachFromUrl();
-            } else {
-              openDirPicker();
+          // Only pane 0 drives the global session list & URL routing
+          if (paneIdx === 0) {
+            const firstLoad = allSessions.length === 0;
+            allSessions = msg.sessions;
+            renderTabs();
+            renderPaneTabs();
+            const current = allSessions.find(s => s.id === panes[0].sessionId);
+            if (panes[0].sessionId && !current) {
+              panes[0].sessionId = null;
+              showTerminal(false, 0);
+              setUrl(dirFromPath());
+            } else if (current) {
+              setUrl(current.dir, current.name);
             }
+            if (firstLoad) {
+              const dir = dirFromPath();
+              if (dir) autoAttachFromUrl();
+              else openDirPicker();
+            }
+          } else {
+            // pane 1: just refresh its session list view
+            allSessions = msg.sessions;
+            renderPaneTabs();
           }
         }
 
@@ -966,60 +1249,65 @@
         }
 
         if (msg.type === 'session.attached') {
-          currentSessionId = msg.id;
+          pane.sessionId = msg.id;
           sessionNeedsInput.delete(msg.id);
-          hideRateLimit();
-          showTerminal(true);
+          if (paneIdx === 0) hideRateLimit();
+          showTerminal(true, paneIdx);
           renderTabs();
-          setUrl(msg.dir, msg.name);
-          // Clear open file tabs for previous session
-          openFiles = [];
-          currentFileIdx = -1;
-          editorDirty = false;
-          hideAllViews();
-          document.getElementById('editor-placeholder').style.display = 'flex';
-          document.getElementById('editor-filename').textContent = 'No file open';
-          document.getElementById('editor-save').style.display = 'none';
-          document.getElementById('editor-close').style.display = 'none';
-          document.getElementById('editor-modes').style.display = 'none';
-          document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
-          renderFileTabs();
-          // Always update file browser to this session's project dir
-          maybeFbLoad(msg.dir);
-          // Restore open files for this session
-          if (msg.openFilesList && msg.openFilesList.length > 0) {
-            setTimeout(() => restoreOpenFiles(msg.openFilesList, msg.openFilesActive || 0), 300);
-          } else if (msg.lastOpenFile) {
-            setTimeout(() => openFile(msg.lastOpenFile, null), 300);
+          renderPaneTabs();
+
+          // Only pane 0 updates URL, file browser, open files
+          if (paneIdx === 0) {
+            setUrl(msg.dir, msg.name);
+            openFiles = [];
+            currentFileIdx = -1;
+            editorDirty = false;
+            hideAllViews();
+            document.getElementById('editor-placeholder').style.display = 'flex';
+            document.getElementById('editor-filename').textContent = 'No file open';
+            document.getElementById('editor-save').style.display = 'none';
+            document.getElementById('editor-close').style.display = 'none';
+            document.getElementById('editor-modes').style.display = 'none';
+            document.querySelectorAll('.fb-item.active').forEach(e => e.classList.remove('active'));
+            renderFileTabs();
+            maybeFbLoad(msg.dir);
+            if (msg.openFilesList && msg.openFilesList.length > 0) {
+              setTimeout(() => restoreOpenFiles(msg.openFilesList, msg.openFilesActive || 0), 300);
+            } else if (msg.lastOpenFile) {
+              setTimeout(() => openFile(msg.lastOpenFile, null), 300);
+            }
+            if (msg.dir && msg.name) {
+              const cleanName = msg.name.replace(/^[^\w]+/, '').trim() || msg.name;
+              fetch('/api/dirs').then(r => r.json()).then(({ base }) => {
+                const notesPath = base + '/' + msg.dir + '/sessions/' + cleanName + '.md';
+                fetch('/api/file?path=' + encodeURIComponent(notesPath))
+                  .then(r => r.json())
+                  .then(({ error }) => {
+                    if (!error && !openFiles.find(f => f.path === notesPath)) {
+                      setTimeout(() => openFile(notesPath, null), 350);
+                    }
+                  });
+              });
+            }
           }
-          // Auto-load session notes if it exists (no auto-create)
-          if (msg.dir && msg.name) {
-            const cleanName = msg.name.replace(/^[^\w]+/, '').trim() || msg.name;
-            fetch('/api/dirs').then(r => r.json()).then(({ base }) => {
-              const notesPath = base + '/' + msg.dir + '/sessions/' + cleanName + '.md';
-              fetch('/api/file?path=' + encodeURIComponent(notesPath))
-                .then(r => r.json())
-                .then(({ error }) => {
-                  if (!error && !openFiles.find(f => f.path === notesPath)) {
-                    setTimeout(() => openFile(notesPath, null), 350);
-                  }
-                });
-            });
-          }
-          // Force terminal refresh
+
           setTimeout(() => {
-            fitAddon.fit();
-            term.scrollToBottom();
-            const { cols, rows } = term;
-            if (ws.readyState === WebSocket.OPEN)
-              ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+            pane.fitAddon.fit();
+            pane.term.scrollToBottom();
+            const { cols, rows } = pane.term;
+            if (pane.ws.readyState === WebSocket.OPEN)
+              pane.ws.send(JSON.stringify({ type: 'resize', cols, rows }));
           }, 100);
         }
       };
 
-      ws.onclose = () => {
-        if (currentSessionId) term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n');
+      newWs.onclose = () => {
+        if (pane.sessionId) pane.term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n');
       };
+    }
+
+    function initWs() {
+      // kept for compat — actual init now done inline via openPaneWs
     }
 
     // Kill confirm modal
@@ -1123,14 +1411,6 @@
       dirModal.classList.remove('show');
     });
 
-    // Track typed input to detect claude commands
-    let inputBuffer = '';
-    function renameSession(name) {
-      if (currentSessionId) {
-        ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name }));
-      }
-    }
-
     // xterm.js internally responds to queries (OSC color queries, cursor position reports)
     // via onData — we must NOT forward these back to the PTY or they get echoed as garbage.
     function isTerminalResponse(data) {
@@ -1138,30 +1418,7 @@
              /^\x1b\[\d+;\d+R$/.test(data); // Cursor Position Report (CPR)
     }
 
-    term.onData((data) => {
-      if (isTerminalResponse(data)) return;
-      send(data);
-      if (data === '\r') {
-        const line = inputBuffer.trim();
-        const escapedCmd = claudeCmd.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (new RegExp('^' + escapedCmd + '\\s*$').test(line)) {
-          renameSession('Claude');
-        }
-        inputBuffer = '';
-      } else if (data === '\x7f') {
-        inputBuffer = inputBuffer.slice(0, -1); // backspace
-      } else if (data.length === 1 && data >= ' ') {
-        inputBuffer += data;
-      }
-    });
-
-    term.onTitleChange((title) => {
-      if (currentSessionId && title) renameSession(title);
-    });
-    term.onResize(({ cols, rows }) => {
-      if (ws.readyState === WebSocket.OPEN)
-        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
-    });
+    function renameSession(name) { paneRenameSession(activePaneIdx, name); }
 
     // Toolbar
     document.getElementById('btn-tab').addEventListener('click',    () => send('\t'));
@@ -1172,9 +1429,6 @@
     document.getElementById('btn-claude').addEventListener('click', () => {
       send(claudeCmd + '\r');
       renameSession('Claude');
-      if (currentSessionId) {
-        ws.send(JSON.stringify({ type: 'session.rename', id: currentSessionId, name: 'Claude' }));
-      }
     });
     document.getElementById('btn-continue').addEventListener('click', () => send('continue\r'));
     document.getElementById('btn-next').addEventListener('click',     () => send('do next item\r'));
@@ -1182,9 +1436,11 @@
     document.getElementById('btn-up').addEventListener('click',   () => send('\x1b[A'));
     document.getElementById('btn-down').addEventListener('click', () => send('\x1b[B'));
 
-    function fitAndScroll() { fitAddon.fit(); term.scrollToBottom(); }
-    window.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
-    window.visualViewport?.addEventListener('resize', () => { if (currentSessionId) fitAndScroll(); });
+    function fitAndScroll() {
+      panes.forEach(p => { if (p && p.sessionId) { p.fitAddon.fit(); p.term.scrollToBottom(); } });
+    }
+    window.addEventListener('resize', () => fitAndScroll());
+    window.visualViewport?.addEventListener('resize', () => fitAndScroll());
 
     // ── File browser ─────────────────────────────────────────────────────────
     let fbCurrentPath = null; // null = not yet loaded
