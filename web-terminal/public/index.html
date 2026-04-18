@@ -398,23 +398,24 @@
       line-height: 1;
     }
     .session-tab .input-hint {
-      font-size: 14px;
+      font-size: 18px;
       color: #ffe000;
       animation: hint-pulse 0.7s ease-in-out infinite alternate;
       line-height: 1;
       display: inline-block;
-      filter: drop-shadow(0 0 4px #ffe000);
+      filter: drop-shadow(0 0 6px #ffe000);
+      vertical-align: middle;
     }
     @keyframes hint-pulse {
       from {
         opacity: 0.3;
-        transform: scale(0.85);
-        filter: drop-shadow(0 0 2px #ff0);
+        transform: scale(0.8);
+        filter: drop-shadow(0 0 3px #ff0);
       }
       to {
         opacity: 1;
-        transform: scale(1.35);
-        filter: drop-shadow(0 0 8px #ffe000) drop-shadow(0 0 16px #ffa500);
+        transform: scale(1.6);
+        filter: drop-shadow(0 0 10px #ffe000) drop-shadow(0 0 22px #ffa500);
       }
     }
 
