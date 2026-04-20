@@ -74,6 +74,9 @@
 
   ## Tickets / Confluence
   -
+
+  ## Contact / Chat Group
+  -
   ```
 - **Claude integration**: for Claude sessions, clicking 📝 automatically sends a prompt asking Claude to update the notes file
 

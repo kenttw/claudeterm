@@ -1168,6 +1168,9 @@
           '## Tickets / Confluence',
           '- ',
           '',
+          '## Contact / Chat Group',
+          '- ',
+          '',
         ].join('\n');
         await fetch('/api/file', {
           method: 'POST',
@@ -1184,7 +1187,7 @@
           attachSession(session.id);
           await new Promise(r => setTimeout(r, 400));
         }
-        const prompt = `Please update ${relNotesPath} with a summary of our work so far. Include: 1) Key Points — major decisions and findings, 2) Related Files — important .md files referenced, 3) Tickets / Confluence — any Jira tickets or Confluence links mentioned. Keep each section concise.\r`;
+        const prompt = `Please update ${relNotesPath} with a summary of our work so far. Include: 1) Key Points — major decisions and findings, 2) Related Files — important .md files referenced, 3) Tickets / Confluence — any Jira tickets or Confluence links mentioned, 4) Contact / Chat Group — any people or chat groups involved. Keep each section concise.\r`;
         send(prompt);
       }
     }
