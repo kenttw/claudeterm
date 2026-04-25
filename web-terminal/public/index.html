@@ -1593,13 +1593,14 @@
       const lang = hljs.getLanguage(rawLang) ? rawLang : 'python';
       let html = '';
       try {
-        cells.forEach(cell => {
+        cells.forEach((cell, idx) => {
           const src = Array.isArray(cell.source) ? cell.source.join('') : (cell.source || '');
+          const cellNum = `#${idx + 1}`;
           if (cell.cell_type === 'code') {
             let hl;
             try { hl = hljs.highlight(src, { language: lang, ignoreIllegals: true }).value; }
             catch { hl = escHtml(src); }
-            html += `<div class="nb-cell"><div class="nb-cell-header">In [${cell.execution_count ?? ' '}]</div>
+            html += `<div class="nb-cell"><div class="nb-cell-header">${cellNum} &nbsp; In [${cell.execution_count ?? ' '}]</div>
               <div class="nb-cell-code"><pre><code class="hljs language-${lang}">${hl}</code></pre></div>`;
             (cell.outputs || []).forEach(o => {
               let t = '';
@@ -1610,7 +1611,7 @@
             });
             html += '</div>';
           } else if (cell.cell_type === 'markdown') {
-            html += `<div class="nb-cell"><div class="nb-cell-header">Markdown</div>
+            html += `<div class="nb-cell"><div class="nb-cell-header">${cellNum} &nbsp; Markdown</div>
               <div class="nb-cell-md">${marked.parse(src)}</div></div>`;
           }
         });
@@ -1680,6 +1681,7 @@
       for (const filePath of paths) {
         try {
           const fileName = filePath.split('/').pop();
+          if (openFiles.find(f => f.path === filePath)) continue;
           if (isImage(fileName)) {
             openFiles.push({ path: filePath, fileName, content: null, dirty: false, mode: 'image' });
             continue;
@@ -1687,6 +1689,7 @@
           const r = await fetch('/api/file?path=' + encodeURIComponent(filePath));
           const { content, error, mtime } = await r.json();
           if (error) continue;
+          if (openFiles.find(f => f.path === filePath)) continue;
           let defaultMode;
           if (isNotebook(fileName)) defaultMode = 'notebook';
           else if (isCsv(fileName)) defaultMode = 'csv';
